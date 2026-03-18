@@ -7399,6 +7399,17 @@ document.getElementById("shop").addEventListener("click", (e) => {
     } catch(e) { /* cloud save failed silently — local save still works */ }
   }
 
+  // Exposed for reset/new game: delete cloud save for a username
+  window._cloudSaveDelete = function(usernameOverride) {
+    const username = usernameOverride
+      ? usernameOverride.toUpperCase()
+      : (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
+    sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {});
+    // Also try uppercase variant since getUsername returns uppercase
+    if (!usernameOverride) return;
+    sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(username.toUpperCase()), { method: 'DELETE' }).catch(() => {});
+  };
+
   async function pullCloudSave() {
     try {
       const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
@@ -7785,6 +7796,10 @@ document.getElementById("shop").addEventListener("click", (e) => {
     localStorage.setItem('yzy_username', val);
     localStorage.removeItem('yzy_twitter');
 
+    // Delete cloud save for this new username so startup doesn't pull
+    // in an old save that belonged to someone with the same name
+    try { if (window._cloudSaveDelete) window._cloudSaveDelete(val); } catch(e) {}
+
     // 3. Reset game state in memory
     bars = 0; totalBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
     Object.keys(owned).forEach(k => { owned[k] = 0; });
@@ -7842,9 +7857,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
       localStorage.removeItem('ye_panel_w');
     } catch(e) {}
 
-    // 2. Best-effort leaderboard delete (fire-and-forget, don't await)
+    // 2. Best-effort leaderboard + cloud save delete (fire-and-forget)
     try {
       if (window._lbDelete) window._lbDelete();
+    } catch(e) {}
+    try {
+      if (window._cloudSaveDelete) window._cloudSaveDelete();
     } catch(e) {}
 
     // 3. Reload immediately
