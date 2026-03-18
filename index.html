@@ -7372,15 +7372,21 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // Also submit on milestone unlocks (score jumps)
   const _origCheckMilestone = window.checkMilestone;
 
-  // ── Check if a username is already taken in yzy_saves ──
+  // ── Check if a username is already taken ──
+  // Checks both yzy_leaderboard (everyone who's played) and yzy_saves (cloud saves)
   window.checkUsernameAvailable = async function(username) {
-    if (!CONFIGURED) return true; // if not configured, allow all
+    if (!CONFIGURED) return true;
+    const upper = username.toUpperCase();
     try {
-      const rows = await sbFetch(
-        'yzy_saves?select=username&username=eq.' + encodeURIComponent(username.toUpperCase()),
-        { headers: { "Prefer": "return=representation" } }
-      );
-      return !rows || rows.length === 0; // true = available, false = taken
+      const [lbRows, saveRows] = await Promise.all([
+        sbFetch('yzy_leaderboard?select=username&username=eq.' + encodeURIComponent(upper),
+          { headers: { "Prefer": "return=representation" } }),
+        sbFetch('yzy_saves?select=username&username=eq.' + encodeURIComponent(upper),
+          { headers: { "Prefer": "return=representation" } })
+      ]);
+      const takenInLb   = lbRows   && lbRows.length   > 0;
+      const takenInSave = saveRows && saveRows.length > 0;
+      return !takenInLb && !takenInSave; // true = available
     } catch(e) {
       return true; // if check fails, allow through
     }
