@@ -7380,15 +7380,53 @@ document.getElementById("shop").addEventListener("click", (e) => {
     };
   }
 
-  // ── Save to localStorage ──
+  // ── Cloud save helpers ──
+  const CLOUD_SAVE_TABLE = "yzy_saves";
+  let cloudSaveTs = 0;
+
+  async function pushCloudSave(obj) {
+    try {
+      const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
+      await sbFetch(CLOUD_SAVE_TABLE + '?on_conflict=username', {
+        method: 'POST',
+        prefer: 'resolution=merge-duplicates,return=minimal',
+        body: JSON.stringify({
+          username:  username,
+          save_data: JSON.stringify(obj),
+          saved_at:  new Date().toISOString()
+        })
+      });
+    } catch(e) { /* cloud save failed silently — local save still works */ }
+  }
+
+  async function pullCloudSave() {
+    try {
+      const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
+      const rows = await sbFetch(
+        CLOUD_SAVE_TABLE + '?select=save_data,saved_at&username=eq.' + encodeURIComponent(username),
+        { headers: { "Prefer": "return=representation" } }
+      );
+      if (!rows || rows.length === 0) return null;
+      return JSON.parse(rows[0].save_data);
+    } catch(e) { return null; }
+  }
+
+  // ── Save to localStorage + cloud ──
   function saveGame(silent) {
     try {
-      const data = JSON.stringify(buildSaveObject());
+      const obj  = buildSaveObject();
+      const data = JSON.stringify(obj);
       localStorage.setItem(getSaveKey(), data);
       if (!silent) flashSaveStatus('SAVED ✓', false);
       updateSaveStatus();
       // Auto-submit to leaderboard on every save
       if (window.lbAutoSubmit) window.lbAutoSubmit();
+      // Push to cloud (throttled — max once per 15s to avoid hammering Supabase)
+      const now = Date.now();
+      if (now - cloudSaveTs > 15000) {
+        cloudSaveTs = now;
+        pushCloudSave(obj);
+      }
     } catch(e) {
       if (!silent) flashSaveStatus('SAVE FAILED', true);
     }
@@ -7829,21 +7867,36 @@ document.getElementById("shop").addEventListener("click", (e) => {
     }
   } catch(e) {}
 
-  // ── Load on startup ──
-  try {
-    const raw = localStorage.getItem(getSaveKey());
-    if (raw) {
-      const obj = JSON.parse(raw);
-      if (applyGame(obj)) {
-        // queue era switch after DOM settles
-        setTimeout(() => {
-          switchToAlbum(albumIdx);
-          updateUI();
-          updateSaveStatus();
-        }, 50);
+  // ── Load on startup — prefer cloud save if newer or higher score ──
+  (async function loadOnStartup() {
+    let localObj = null;
+    try {
+      const raw = localStorage.getItem(getSaveKey());
+      if (raw) localObj = JSON.parse(raw);
+    } catch(e) {}
+
+    // Show local save immediately so the game isn't blank while cloud loads
+    if (localObj && applyGame(localObj)) {
+      setTimeout(() => { switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
+    }
+
+    // Then check cloud — if cloud save is newer or has a higher score, use it
+    const cloudObj = await pullCloudSave();
+    if (cloudObj && cloudObj.v === 1) {
+      const localTs    = localObj ? (localObj.ts || 0) : 0;
+      const cloudTs    = cloudObj.ts || 0;
+      const localBars  = localObj ? (localObj.totalBars || 0) : 0;
+      const cloudBars  = cloudObj.totalBars || 0;
+      const useCloud   = cloudBars > localBars || cloudTs > localTs;
+      if (useCloud) {
+        if (applyGame(cloudObj)) {
+          // Also update localStorage so next load is instant
+          try { localStorage.setItem(getSaveKey(), JSON.stringify(cloudObj)); } catch(e) {}
+          setTimeout(() => { switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
+        }
       }
     }
-  } catch(e) {}
+  })();
 })();
 </script>
 </body>
