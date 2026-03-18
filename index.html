@@ -7110,6 +7110,28 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (totalBars < 0 || totalClicks < 0) return;
     if (totalBars > 1e14 || totalClicks > 5e7) return;
 
+    // ── Only submit if our score is higher than what's on the leaderboard ──
+    // Prevents a device with an old/lower save from overwriting a higher
+    // score that was set on another device.
+    try {
+      const existing = await sbFetch(
+        TABLE + '?select=total_bars,total_clicks&username=eq.' + encodeURIComponent(username),
+        { headers: { "Prefer": "return=representation" } }
+      );
+      if (existing && existing.length > 0) {
+        const remote = existing[0];
+        if (Math.floor(totalBars) < remote.total_bars) {
+          // Remote score is higher — sync it into local state silently
+          totalBars   = remote.total_bars;
+          totalClicks = Math.max(totalClicks, remote.total_clicks);
+          updateCounters();
+          return; // don't overwrite the higher score
+        }
+      }
+    } catch(e) {
+      // If fetch fails, proceed with submission anyway
+    }
+
     const payload = {
       username:       username,
       total_bars:     Math.floor(totalBars),
