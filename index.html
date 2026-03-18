@@ -6972,7 +6972,23 @@ document.getElementById("shop").addEventListener("click", (e) => {
     pmErr.textContent = 'Checking...';
     const available = window.checkUsernameAvailable ? await window.checkUsernameAvailable(val) : true;
     if (!available) { pmErr.textContent = 'That username is already taken.'; return; }
+
+    // Wipe all in-memory game state so nothing bleeds in from a previous session
+    bars = 0; totalBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+    Object.keys(owned).forEach(k => { owned[k] = 0; });
+    boughtUpgrades = new Set(); boughtFashion = new Set();
+    albumIdx = 0; lastMilestone = -1;
+
     setUsername(val);
+
+    // Delete any cloud save under this name (safety net for pre-uniqueness-check saves)
+    try { if (window._cloudSaveDelete) window._cloudSaveDelete(val); } catch(e) {}
+
+    // Clear localStorage save key for this new user so nothing loads
+    try { if (window.getSaveKey) localStorage.removeItem(window.getSaveKey()); } catch(e) {}
+
+    switchToAlbum(0);
+    updateUI();
     overlay.classList.remove('open');
   }
 
