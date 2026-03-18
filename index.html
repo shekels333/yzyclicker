@@ -7378,11 +7378,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
     fetchLeaderboard();
   };
 
-  // Exposed for reset: fire-and-forget leaderboard row delete
+  // Exposed for reset: leaderboard row delete — returns a promise so reset can await it
   window._lbDelete = function(usernameOverride) {
-    if (!CONFIGURED) return;
+    if (!CONFIGURED) return Promise.resolve();
     const username = usernameOverride || getUsername();
-    sbFetch(TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {});
+    return sbFetch(TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {});
   };
 
   // Also submit on milestone unlocks (score jumps)
@@ -7460,15 +7460,16 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // Expose pushCloudSave globally so profile/name changes can call it
   window.pushCloudSave = pushCloudSave;
 
-  // Exposed for reset/new game: delete cloud save for a username
+  // Exposed for reset/new game: delete cloud save — returns a promise so reset can await it
   window._cloudSaveDelete = function(usernameOverride) {
-    const username = usernameOverride
-      ? usernameOverride.toUpperCase()
+    const raw = usernameOverride
+      ? usernameOverride
       : (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
-    sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {});
-    // Also try uppercase variant since getUsername returns uppercase
-    if (!usernameOverride) return;
-    sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(username.toUpperCase()), { method: 'DELETE' }).catch(() => {});
+    const username = raw.toUpperCase();
+    return Promise.all([
+      sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {}),
+      sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(raw), { method: 'DELETE' }).catch(() => {})
+    ]);
   };
 
   async function pullCloudSave() {
@@ -7906,7 +7907,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   });
   resetNo.addEventListener('click', () => { resetConfirm.style.display = 'none'; });
 
-  resetYes.addEventListener('click', () => {
+  resetYes.addEventListener('click', async () => {
     resetConfirm.style.display = 'none';
 
     // 0. Grab username BEFORE wiping localStorage — deletes need it
@@ -7924,15 +7925,15 @@ document.getElementById("shop").addEventListener("click", (e) => {
       localStorage.removeItem('ye_panel_w');
     } catch(e) {}
 
-    // 2. Delete leaderboard + cloud save using the username we captured above
-    try {
-      if (window._lbDelete) window._lbDelete(usernameToDelete);
-    } catch(e) {}
-    try {
-      if (window._cloudSaveDelete) window._cloudSaveDelete(usernameToDelete);
-    } catch(e) {}
+    // 2. Await leaderboard + cloud save deletes before reloading
+    // Previously these were fire-and-forget so the page reloaded before
+    // the DELETE requests reached Supabase
+    await Promise.all([
+      window._lbDelete    ? window._lbDelete(usernameToDelete)      : Promise.resolve(),
+      window._cloudSaveDelete ? window._cloudSaveDelete(usernameToDelete) : Promise.resolve()
+    ]).catch(() => {});
 
-    // 3. Reload immediately
+    // 3. Now safe to reload — deletes have completed
     location.reload();
   });
 
