@@ -7364,6 +7364,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function buildSaveObject() {
     return {
       v: 1,
+      username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
       bars: bars,
       totalBars: totalBars,
       totalClicks: totalClicks,
@@ -7511,7 +7512,15 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const obj  = JSON.parse(json);
       if (!obj || obj.v !== 1) throw new Error('invalid');
       if (applyGame(obj)) {
-        // save to localStorage and reload UI
+        // If the save has a username, switch to it so the save goes to the
+        // right profile key and the leaderboard submits under the right name
+        if (obj.username && obj.username.trim().length >= 2) {
+          const importedName = obj.username.trim();
+          localStorage.setItem('yzy_username', importedName);
+          const nd = document.getElementById('hp-name-display');
+          if (nd) nd.textContent = importedName.toUpperCase();
+        }
+        // save to localStorage under the (now correct) user key
         localStorage.setItem(getSaveKey(), JSON.stringify(obj));
         switchToAlbum(albumIdx);
         updateUI();
