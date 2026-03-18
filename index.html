@@ -1130,6 +1130,7 @@
     border-radius: 4px; padding: 36px 32px 28px;
     min-width: 320px; max-width: 420px; width: 90%;
     position: relative; box-shadow: 0 8px 48px rgba(0,0,0,0.7);
+    max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
   #settings-modal h2 {
     font-family: var(--display-font,'Playfair Display',serif);
@@ -7512,21 +7513,50 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const obj  = JSON.parse(json);
       if (!obj || obj.v !== 1) throw new Error('invalid');
       if (applyGame(obj)) {
-        // If the save has a username, switch to it so the save goes to the
-        // right profile key and the leaderboard submits under the right name
-        if (obj.username && obj.username.trim().length >= 2) {
-          const importedName = obj.username.trim();
-          localStorage.setItem('yzy_username', importedName);
-          const nd = document.getElementById('hp-name-display');
-          if (nd) nd.textContent = importedName.toUpperCase();
-        }
-        // save to localStorage under the (now correct) user key
-        localStorage.setItem(getSaveKey(), JSON.stringify(obj));
+
+        // ── Save current profile before switching ──
+        try {
+          const curData = JSON.stringify({
+            v:1, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
+            username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
+            owned: Object.assign({}, owned),
+            upgrades: Array.from(boughtUpgrades),
+            fashion: Array.from(boughtFashion),
+            lastMilestone: lastMilestone,
+            ts: Date.now()
+          });
+          localStorage.setItem(getSaveKey(), curData);
+        } catch(e) {}
+
+        // ── Switch to imported profile ──
+        // Use embedded username if present, otherwise fall back to a generated name
+        let importedName = (obj.username && obj.username.trim().length >= 2)
+          ? obj.username.trim()
+          : 'imported_' + Date.now().toString().slice(-5);
+
+        // Make sure we don't overwrite an existing different profile silently —
+        // if this username already exists in localStorage and it's not the
+        // current user, treat it as switching to that profile
+        localStorage.setItem('yzy_username', importedName);
+        localStorage.removeItem('yzy_twitter');
+
+        // Save the imported data under the correct profile key
+        const importSaveObj = Object.assign({}, obj, {
+          username: importedName,
+          ts: obj.ts || Date.now()
+        });
+        localStorage.setItem(getSaveKey(), JSON.stringify(importSaveObj));
+
+        // Update header name display
+        const nd = document.getElementById('hp-name-display');
+        if (nd) nd.textContent = importedName.toUpperCase();
+
         switchToAlbum(albumIdx);
         updateUI();
         input.value = '';
-        setImportMsg('✓ Save imported!', false);
+        setImportMsg('✓ Imported as ' + importedName.toUpperCase(), false);
         updateSaveStatus();
+        renderProfileList();
         setTimeout(() => setImportMsg('', false), 3000);
       } else {
         setImportMsg('Could not apply save data.', true);
