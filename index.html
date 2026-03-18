@@ -7341,9 +7341,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
   };
 
   // Exposed for reset: fire-and-forget leaderboard row delete
-  window._lbDelete = function() {
+  window._lbDelete = function(usernameOverride) {
     if (!CONFIGURED) return;
-    const username = getUsername();
+    const username = usernameOverride || getUsername();
     sbFetch(TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {});
   };
 
@@ -7845,6 +7845,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
   resetYes.addEventListener('click', () => {
     resetConfirm.style.display = 'none';
 
+    // 0. Grab username BEFORE wiping localStorage — deletes need it
+    const usernameToDelete = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || '');
+
     // 1. Wipe all local data first (synchronous — must happen before reload)
     window._yzy_resetting = true;
     try {
@@ -7857,12 +7860,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
       localStorage.removeItem('ye_panel_w');
     } catch(e) {}
 
-    // 2. Best-effort leaderboard + cloud save delete (fire-and-forget)
+    // 2. Delete leaderboard + cloud save using the username we captured above
     try {
-      if (window._lbDelete) window._lbDelete();
+      if (window._lbDelete) window._lbDelete(usernameToDelete);
     } catch(e) {}
     try {
-      if (window._cloudSaveDelete) window._cloudSaveDelete();
+      if (window._cloudSaveDelete) window._cloudSaveDelete(usernameToDelete);
     } catch(e) {}
 
     // 3. Reload immediately
