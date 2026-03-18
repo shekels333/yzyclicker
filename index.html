@@ -7907,13 +7907,13 @@ document.getElementById("shop").addEventListener("click", (e) => {
   });
   resetNo.addEventListener('click', () => { resetConfirm.style.display = 'none'; });
 
-  resetYes.addEventListener('click', async () => {
+  resetYes.addEventListener('click', () => {
     resetConfirm.style.display = 'none';
 
     // 0. Grab username BEFORE wiping localStorage — deletes need it
     const usernameToDelete = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || '');
 
-    // 1. Wipe all local data first (synchronous — must happen before reload)
+    // 1. Wipe all local data immediately (synchronous)
     window._yzy_resetting = true;
     try {
       for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -7925,16 +7925,19 @@ document.getElementById("shop").addEventListener("click", (e) => {
       localStorage.removeItem('ye_panel_w');
     } catch(e) {}
 
-    // 2. Await leaderboard + cloud save deletes before reloading
-    // Previously these were fire-and-forget so the page reloaded before
-    // the DELETE requests reached Supabase
-    await Promise.all([
-      window._lbDelete    ? window._lbDelete(usernameToDelete)      : Promise.resolve(),
-      window._cloudSaveDelete ? window._cloudSaveDelete(usernameToDelete) : Promise.resolve()
-    ]).catch(() => {});
+    // 2. Set a hard reload timeout — page WILL reload within 2s no matter what
+    const reloadTimer = setTimeout(() => location.reload(), 2000);
 
-    // 3. Now safe to reload — deletes have completed
-    location.reload();
+    // 3. Fire deletes and reload as soon as they finish (or on error)
+    Promise.all([
+      window._lbDelete        ? window._lbDelete(usernameToDelete)        : Promise.resolve(),
+      window._cloudSaveDelete ? window._cloudSaveDelete(usernameToDelete) : Promise.resolve()
+    ])
+    .catch(() => {})
+    .finally(() => {
+      clearTimeout(reloadTimer);
+      location.reload();
+    });
   });
 
   // ── Autosave every 30s ──
