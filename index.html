@@ -6965,18 +6965,28 @@ document.getElementById("shop").addEventListener("click", (e) => {
     else localStorage.removeItem(TWITTER_KEY);
   }
 
-  function confirmCreate() {
+  async function confirmCreate() {
     const val = sanitize(pmInput.value);
     if (!val) { pmErr.textContent = 'Please enter a name.'; return; }
     if (val.length < 2) { pmErr.textContent = 'At least 2 characters.'; return; }
+    pmErr.textContent = 'Checking...';
+    const available = window.checkUsernameAvailable ? await window.checkUsernameAvailable(val) : true;
+    if (!available) { pmErr.textContent = 'That username is already taken.'; return; }
     setUsername(val);
     overlay.classList.remove('open');
   }
 
-  function confirmEdit() {
+  async function confirmEdit() {
     const val = sanitize(emInput.value);
     if (!val) { emErr.textContent = 'Please enter a name.'; return; }
     if (val.length < 2) { emErr.textContent = 'At least 2 characters.'; return; }
+    // Only check availability if the name is actually changing
+    const currentName = localStorage.getItem('yzy_username') || '';
+    if (val.toUpperCase() !== currentName.toUpperCase()) {
+      emErr.textContent = 'Checking...';
+      const available = window.checkUsernameAvailable ? await window.checkUsernameAvailable(val) : true;
+      if (!available) { emErr.textContent = 'That username is already taken.'; return; }
+    }
     // Migrate save file from old key to new key before changing username
     try {
       if (window.getSaveKey) {
@@ -6994,6 +7004,18 @@ document.getElementById("shop").addEventListener("click", (e) => {
     } catch(e) {}
     setUsername(val);
     setTwitter(sanitizeTwitter(emTwitter ? emTwitter.value : ''));
+
+    // Immediately push current save to cloud under the new username so that
+    // if someone else has that name in yzy_saves, our data overwrites theirs
+    // rather than their data overwriting ours on next load
+    try {
+      if (window.pushCloudSave && window.buildSaveObject) {
+        window.pushCloudSave(window.buildSaveObject());
+      } else if (window.saveGame) {
+        window.saveGame(true);
+      }
+    } catch(e) {}
+
     editOverlay.classList.remove('open');
   }
 
@@ -7350,6 +7372,20 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // Also submit on milestone unlocks (score jumps)
   const _origCheckMilestone = window.checkMilestone;
 
+  // ── Check if a username is already taken in yzy_saves ──
+  window.checkUsernameAvailable = async function(username) {
+    if (!CONFIGURED) return true; // if not configured, allow all
+    try {
+      const rows = await sbFetch(
+        'yzy_saves?select=username&username=eq.' + encodeURIComponent(username.toUpperCase()),
+        { headers: { "Prefer": "return=representation" } }
+      );
+      return !rows || rows.length === 0; // true = available, false = taken
+    } catch(e) {
+      return true; // if check fails, allow through
+    }
+  };
+
 })();
 
 /* ── SAVE SYSTEM ── */
@@ -7398,6 +7434,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
       });
     } catch(e) { /* cloud save failed silently — local save still works */ }
   }
+
+  // Expose pushCloudSave globally so profile/name changes can call it
+  window.pushCloudSave = pushCloudSave;
 
   // Exposed for reset/new game: delete cloud save for a username
   window._cloudSaveDelete = function(usernameOverride) {
@@ -7774,9 +7813,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
   });
   ngNo.addEventListener('click', () => { ngConfirm.style.display = 'none'; });
 
-  function doNewGame() {
+  async function doNewGame() {
     const val = sanitizeNgName(ngNameIn.value);
     if (!val || val.length < 2) { ngErr.textContent = 'At least 2 characters.'; return; }
+    ngErr.textContent = 'Checking...';
+    const available = window.checkUsernameAvailable ? await window.checkUsernameAvailable(val) : true;
+    if (!available) { ngErr.textContent = 'That username is already taken.'; return; }
     ngConfirm.style.display = 'none';
 
     // 1. Save current game under current user before switching
