@@ -1450,6 +1450,11 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 #settings-modal div,#settings-modal span{letter-spacing:normal}
 #settings-modal [style*="font-size:10px"],#settings-modal [style*="font-size:11px"],#sm-save-status,#sm-import-msg{font-size:12px!important;opacity:.85}
 #profile-modal .pm-sub,#profile-modal .pm-err{font-size:12px!important;letter-spacing:.04em!important}
+
+#settings-modal .sm-row{display:flex;gap:6px;align-items:stretch;width:100%}
+#settings-modal .sm-del{flex:0 0 34px;background:rgba(255,255,255,.05);border:1px solid rgba(232,64,64,.45);border-radius:3px;color:rgba(240,120,120,.95);cursor:pointer;font-size:13px!important;padding:0;display:flex;align-items:center;justify-content:center}
+#settings-modal .sm-del:hover{background:rgba(232,64,64,.18)}
+#settings-modal .sm-del:disabled{opacity:.25;cursor:not-allowed;border-color:rgba(255,255,255,.2);color:#aaa}
 </style>
 
 </head>
@@ -8411,6 +8416,23 @@ document.getElementById("shop").addEventListener("click", (e) => {
   const settingsBtn     = document.getElementById('settings-btn');
   const settingsClose   = document.getElementById('settings-close');
 
+  function fmtDay(t) { try { return new Date(t).toLocaleDateString([], {month:'short',day:'numeric',year:'numeric'}); } catch(e) { return ''; } }
+  function rowWrap(main, delTitle, onDel) {
+    const row = document.createElement('div'); row.className = 'sm-row';
+    main.style.flex = '1'; main.style.minWidth = '0'; main.style.marginBottom = '0';
+    row.appendChild(main);
+    const x = document.createElement('button'); x.className = 'sm-del'; x.type = 'button'; x.textContent = '✕';
+    x.title = delTitle; x.setAttribute('aria-label', delTitle);
+    if (onDel) x.addEventListener('click', e => { e.stopPropagation(); onDel(); }); else { x.disabled = true; }
+    row.appendChild(x); return row;
+  }
+  function deleteLocalProfile(slug) {
+    if (!slug || slug === slugOf(localStorage.getItem('yzy_username') || '')) return false;
+    [SAVE_PREFIX + slug, SAVE_PREFIX + slug + '_alive', SAVE_PREFIX + slug + '_offclaim', BAK_PREFIX + slug, 'yzy_owner_' + slug]
+      .forEach(k => { try { localStorage.removeItem(k); } catch(e) {} });
+    return true;
+  }
+  window._yzyDeleteLocalProfile = deleteLocalProfile;
   function renderProfileList() {
     const list = document.getElementById('sm-profiles-list');
     const empty = document.getElementById('sm-profiles-empty');
@@ -8424,6 +8446,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
         const uSlug = k.replace('yzy_save_v1_', '');
         if (uSlug !== curUser) profiles.push({ key: k, slug: uSlug });
       }
+    }
+    if (curUser) {
+      const cur = document.createElement('div'); cur.className = 'sm-btn'; cur.style.cssText = 'cursor:default;opacity:.75;font-size:12px;padding:8px 12px;';
+      cur.textContent = '▶ ' + (localStorage.getItem('yzy_username') || '').toUpperCase() + '  ·  playing now';
+      list.appendChild(rowWrap(cur, 'You can\'t delete the profile you are playing', null));
     }
     if (profiles.length === 0) {
       if (empty) empty.style.display = 'block';
@@ -8454,6 +8481,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
       btn.innerHTML = '<div style="display:flex;align-items:center;gap:8px;width:100%"><span style="opacity:0.5">◈</span><span>' + p.slug.replace(/_/g,' ').toUpperCase() + '</span></div>'
         + (statsLine ? '<div style="font-size:10px;opacity:0.6;letter-spacing:0.5px;padding-left:20px">' + statsLine + '</div>' : '')
         + (tsStr ? '<div style="font-size:10px;opacity:0.35;letter-spacing:0.5px;padding-left:20px">' + tsStr + '</div>' : '');
+      const dispName = (function(){ try { const so = JSON.parse(localStorage.getItem(p.key) || 'null'); if (so && so.username) return String(so.username); } catch(e) {} return p.slug.replace(/_/g,' '); })().toUpperCase();
+      list.appendChild(rowWrap(btn, 'Delete profile ' + dispName + ' from this device', () => {
+        if (!window.confirm('Delete profile ' + dispName + ' (' + (barsStr || '¥0') + ' lifetime) from this device? This can\'t be undone.\n\nIts local save, backups and name key on this device are removed. The cloud copy and the name claim are not touched, but without the key (or an export code) you may not be able to use this name again.')) return;
+        deleteLocalProfile(p.slug); renderProfileList();
+        if (document.getElementById('sm-backups-list').style.display === 'flex') renderBackups();
+      }));
       btn.addEventListener('click', () => {
         // Save current game first (skip if another tab owns newer data)
         try { if (!staleTab) writeSave(getSaveKey(), buildSaveObject()); } catch(e) {}
@@ -8484,7 +8517,6 @@ document.getElementById("shop").addEventListener("click", (e) => {
         if (window.yzyEnsureClaim) window.yzyEnsureClaim(displayName);
         settingsOverlay.classList.remove('open');
       });
-      list.appendChild(btn);
     });
   }
 
@@ -8524,12 +8556,26 @@ document.getElementById("shop").addEventListener("click", (e) => {
       btn.style.cssText = 'flex-direction:column;align-items:flex-start;gap:2px;padding:7px 12px;font-size:12px;';
       const top = document.createElement('div'); top.textContent = name.toUpperCase() + (o ? '  ·  ¥' + formatNum(Number(o.totalBars) || 0) : '  ·  unreadable');
       const sub = document.createElement('div'); sub.style.cssText = 'font-size:10px;opacity:.65;letter-spacing:.3px';
-      sub.textContent = d.toLocaleDateString([], { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) + '  ·  ' + (REASONS[b.reason] || b.reason);
+      sub.textContent = fmtDay(b.t) + ' ' + d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) + '  ·  ' + (REASONS[b.reason] || b.reason);
       btn.appendChild(top); btn.appendChild(sub);
       if (!o) btn.disabled = true;
       btn.addEventListener('click', () => restoreBackup(o, name));
-      list.appendChild(btn);
+      list.appendChild(rowWrap(btn, 'Delete this backup', () => {
+        if (!window.confirm('Delete this backup of ' + name.toUpperCase() + ' from ' + fmtDay(b.t) + '? This can\'t be undone.')) return;
+        const rest = readBaks(b.slug).filter(x => !(x.t === b.t && x.data === b.data));
+        try { if (rest.length) localStorage.setItem(BAK_PREFIX + b.slug, JSON.stringify(rest)); else localStorage.removeItem(BAK_PREFIX + b.slug); } catch(e) {}
+        renderBackups();
+      }));
     });
+    const all = document.createElement('button'); all.className = 'sm-btn danger'; all.id = 'sm-bak-delall';
+    all.style.cssText = 'justify-content:center;font-size:12px;padding:7px 12px;margin-top:4px;';
+    all.textContent = 'Delete all backups';
+    all.addEventListener('click', () => {
+      if (!window.confirm('Delete all ' + items.length + ' backups on this device? Your saves are not affected. This can\'t be undone.')) return;
+      const ks = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(BAK_PREFIX)) ks.push(k); }
+      ks.forEach(k => localStorage.removeItem(k)); renderBackups();
+    });
+    list.appendChild(all);
   }
   function restoreBackup(o, name) {
     const msg = document.getElementById('sm-backup-msg');
