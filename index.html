@@ -140,7 +140,7 @@
   /* Magnitude pop — bigger settle when the suffix rolls over (K → M → B …) */
   #counter-val.pop { animation: counterPop 0.5s var(--ease-spring); }
   @keyframes counterPop { 0% { transform: scale(0.94); filter: brightness(1.8); } 45% { transform: scale(1.1); } 100% { transform: scale(1); filter: brightness(1); } }
-  #counter-bps { font-family: var(--mono-font); font-size: 13px; margin-top: 7px; display: inline-flex; align-items: center; gap: 7px; padding: 3px 11px; border-radius: 20px; background: rgba(127,127,127,0.12); border: 1px solid var(--era-border, rgba(255,255,255,0.15)); transition: color 1s, border-color 1s, background 0.3s; }
+  #counter-bps { font-family: var(--mono-font); font-size: 13px; margin: 7px auto 0; width: fit-content; display: flex; align-items: center; gap: 7px; padding: 3px 11px; border-radius: 20px; background: rgba(127,127,127,0.12); border: 1px solid var(--era-border, rgba(255,255,255,0.15)); transition: color 1s, border-color 1s, background 0.3s; }
   #counter-bps::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.35; flex-shrink: 0; transition: opacity 0.3s; }
   #counter-bps.live { background: rgba(127,127,127,0.2); }
   #counter-bps.live::before { opacity: 1; animation: liveDot 0.9s ease-in-out infinite; box-shadow: 0 0 6px currentColor; }
