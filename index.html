@@ -74,8 +74,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
   #fade-overlay { position: fixed; inset: 0; z-index: 5; background: radial-gradient(ellipse at 50% 45%, #050505 0%, #000 70%); opacity: 0; pointer-events: none; transition: opacity 0.6s var(--ease-in-out); }
   /* Era enter — panels settle in after the fade clears */
   #main-wrap.era-enter #left-panel > *,
-  #main-wrap.era-enter #right-panel,
-  #main-wrap.era-enter #header-title { animation: eraEnter 0.55s var(--ease-out) both; }
+  #main-wrap.era-enter #right-panel { animation: eraEnter 0.55s var(--ease-out) both; }
   #main-wrap.era-enter #left-panel > *:nth-child(2) { animation-delay: 0.03s; }
   #main-wrap.era-enter #left-panel > *:nth-child(3) { animation-delay: 0.06s; }
   #main-wrap.era-enter #left-panel > *:nth-child(4) { animation-delay: 0.09s; }
@@ -1433,14 +1432,16 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
     background-size: 300% 100%; background-position: 100% 0; background-repeat: no-repeat;
     -webkit-background-clip: text; background-clip: text;
     animation: htSheen 7s ease-in-out infinite; animation-delay: calc(1.4s + var(--i) * 55ms); }
+  #header-title.ht-rise-a .ht-l { animation-name: htRiseA; }
+  #header-title.ht-rise-b .ht-l { animation-name: htRiseB; }
   #header-title.ht-replay .ht-l { animation-name: htRise2; }
-  #header-title.ht-pop  { animation: htPop 0.28s var(--ease-out, ease-out); }
   #header-title.ht-pop-big { animation: htPopBig 0.6s var(--ease-spring, cubic-bezier(.34,1.56,.64,1)); }
   @keyframes htRise  { 0% { opacity: 0; transform: translateY(0.45em); } 100% { opacity: 1; transform: none; } }
+  @keyframes htRiseA { 0% { opacity: 0; transform: translateY(0.45em); } 100% { opacity: 1; transform: none; } }
+  @keyframes htRiseB { 0% { opacity: 0; transform: translateY(0.45em); } 100% { opacity: 1; transform: none; } }
   @keyframes htRise2 { 0% { transform: none; } 40% { transform: translateY(-0.22em); } 100% { transform: none; } }
   @keyframes htGlow  { 0%, 100% { opacity: 0; } 50% { opacity: var(--ht-glow-max); } }
   @keyframes htSheen { 0% { background-position: 100% 0; } 22%, 100% { background-position: 0% 0; } }
-  @keyframes htPop    { 0% { transform: scale(1); } 40% { transform: scale(1.045); } 100% { transform: scale(1); } }
   @keyframes htPopBig { 0% { transform: scale(1); } 35% { transform: scale(1.12); } 100% { transform: scale(1); } }
   #header-title { transform-origin: left center; }
   @media (prefers-reduced-motion: reduce) {
@@ -2487,6 +2488,7 @@ function switchToAlbum(idx) {
       if (window.saveGame && !window._yzy_resetting) { try { window.saveGame(true); } catch(e) {} }
       const T = ALBUM_THEMES[idx];
       applyTheme(T, true);
+      if (window._yzyTitleReplay) window._yzyTitleReplay();
       showBanner(T);
       setRandomQuote(T, true);
     } catch(e) { console.error("switchToAlbum error:", e); }
@@ -2536,8 +2538,11 @@ function setRandomQuote(T, force) {
 
 // ─── ERA DOTS ────────────────────────────────────────────────────────────────
 
+let _eraDotsSig = "";
+function eraDotsSig() { return albumIdx + ":" + ALBUM_THEMES.filter((a, i) => i === 0 || eraBars() >= a.threshold).length; }
 function renderEraDots() {
   const T = ALBUM_THEMES[albumIdx];
+  _eraDotsSig = eraDotsSig();
   const container = document.getElementById("era-dots");
   // Only do a full rebuild if count doesn't match (first load or theme count change)
   if (container.children.length !== ALBUM_THEMES.length) {
@@ -7171,15 +7176,31 @@ function fireMilestone(val) {
     s.textContent = ch;
     el.appendChild(s);
   });
-  const restart = cls => { el.classList.remove("ht-pop", "ht-pop-big"); void el.offsetWidth; el.classList.add(cls); };
-  el.addEventListener("animationend", e => { if (e.target === el) el.classList.remove("ht-pop", "ht-pop-big"); });
-  window._yzyTitlePop = () => { if (!el.classList.contains("ht-pop") && !el.classList.contains("ht-pop-big")) restart("ht-pop"); };
+  const RM = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  const reduced = () => !!(RM && RM.matches);
+  const RISE_MS = 700 + 45 * Math.max(0, el.children.length - 1);
+  let flip = false, popTimer = 0, pendingCelebrate = false;
+  const bigPop = () => { el.classList.remove("ht-pop-big"); void el.offsetWidth; el.classList.add("ht-pop-big"); };
+  el.addEventListener("animationend", e => { if (e.target === el) el.classList.remove("ht-pop-big"); });
+  // Replay the load-in letter rise (era switch). Alternating keyframe names +
+  // a reflow restarts it cleanly even when eras are switched rapidly.
+  window._yzyTitleReplay = () => {
+    clearTimeout(popTimer);
+    if (reduced()) { pendingCelebrate = false; return; }
+    flip = !flip;
+    el.classList.remove("ht-replay", "ht-rise-a", "ht-rise-b");
+    void el.offsetWidth;
+    el.classList.add(flip ? "ht-rise-a" : "ht-rise-b");
+    if (pendingCelebrate) { pendingCelebrate = false; popTimer = setTimeout(bigPop, Math.round(RISE_MS * 0.85)); }
+  };
+  // New era unlocked: big pop. If an era transition is mid-flight, land the pop
+  // right after the replayed rise instead of fighting it.
   window._yzyTitleCelebrate = () => {
-    restart("ht-pop-big");
+    if (reduced()) return;
+    if (typeof transitioning !== "undefined" && transitioning) { pendingCelebrate = true; return; }
+    bigPop();
     el.classList.remove("ht-replay"); void el.offsetWidth; el.classList.add("ht-replay");
   };
-  const btn = document.getElementById("click-btn");
-  if (btn) btn.addEventListener("pointerdown", () => window._yzyTitlePop(), { passive: true });
 })();
 
 function showEraUnlockBanner(unlockedTheme) {
@@ -7312,6 +7333,10 @@ function updateCounters() {
   const unlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || eraBars() >= a.threshold).length;
   if (unlockCount !== lastUnlockCount) {
     lastUnlockCount = unlockCount;
+    renderEraDots();
+  } else if (eraDotsSig() !== _eraDotsSig) {
+    // Dots were drawn against a different unlock state (e.g. at boot, before the
+    // save loaded and synced lastUnlockCount) — redraw so they never show stale locks.
     renderEraDots();
   }
 }
@@ -8318,6 +8343,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || eraBars() >= a.threshold).length;
       if (idx >= 0 && idx < lastUnlockCount) albumIdx = idx;
       else albumIdx = lastUnlockCount - 1;
+      try { renderEraDots(); } catch(e) {}
 
       // Restore lastMilestone — if missing from old save, compute it from
       // totalBars so the notification doesn't re-fire on every refresh
