@@ -8030,7 +8030,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function seasonNotice() {
     const k = 'yzy_season_notice_' + SEASON;
     try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch(e) {}
-    setTimeout(() => { yzyToast('Season 1 is here! Beta progress was reset so everyone starts even. Your old save is in Settings → Restore backup.'); const el = document.getElementById('yzy-save-toast'); if (el) { clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, 10000); } }, 700);
+    setTimeout(() => { yzyToast('Season 1 is here!'); const el = document.getElementById('yzy-save-toast'); if (el) { clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, 10000); } }, 700);
   }
   // Archive a legacy save and write the fresh one in its place. Returns the fresh save.
   function archiveLegacy(o) {
