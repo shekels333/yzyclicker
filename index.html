@@ -2310,6 +2310,10 @@ function recomputeMultsFromPurchases() {
 window.recomputeMultsFromPurchases = recomputeMultsFromPurchases;
 
 const MAX_OWNED_PER_GEN = 250;
+// Season cap: theoretical max income (17 gens x 250, all upgrades+fashion ≈ 2.61e14 b/s,
+// plus 50 clicks/s ≈ 4.4e11 b/s) × ~67 days ≈ 1.5e21. Server enforces the same value.
+const SEASON_CAP = 1.5e21;
+function cappedTotal() { return Math.floor(Math.min(totalBars, SEASON_CAP)); }
 
 function minSpendForOwned(ownedMap) {
   let spend = 0;
@@ -7684,7 +7688,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   window.weeklyResetText = weeklyResetText;
   async function submitWeekly() {
     try {
-      const res = await ownedRpc('yzy_weekly_submit_v2', getUsername(), { p_total_bars: Math.floor(totalBars), p_total_clicks: Math.floor(totalClicks),
+      const res = await ownedRpc('yzy_weekly_submit_v2', getUsername(), { p_total_bars: cappedTotal(), p_total_clicks: Math.floor(totalClicks),
           p_era: ALBUM_THEMES[albumIdx] ? ALBUM_THEMES[albumIdx].name : null,
           p_twitter: (window.getTwitterHandle ? window.getTwitterHandle() : '') || null });
       if (res && res.ok && typeof res.need_clicks === 'number') weeklyNeed = res.need_clicks;
@@ -7790,11 +7794,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (!Number.isFinite(totalBars) || !Number.isFinite(totalClicks)) return;
     if (totalBars < 0 || totalClicks < 0) return;
     // Weekly board: server sets the baseline and enforces its own rules.
-    if (totalBars <= 5e13 && totalClicks <= 5e7) submitWeekly();
-    // Soft season cap below the old "just under 100T" forge magnet
-    if (totalBars > 5e13 || totalClicks > 5e7) return;
-    if (totalBars > 1e12 && totalClicks < 5000) { updateRankNote(); return; }
-    if (totalClicks > 0 && (totalBars / totalClicks) > 2e9) { updateRankNote(); return; }
+    // Totals above the season cap submit as the cap, so maxed players still rank.
+    if (totalClicks <= 5e7) submitWeekly();
+    if (totalClicks > 5e7) return;
+    updateRankNote();
+    if (cappedTotal() > 1e12 && totalClicks < 5000) return;
 
     // ── Only submit if our score is higher than what's on the leaderboard ──
     // Prevents a device with an old/lower save from overwriting a higher
@@ -7808,7 +7812,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         const remote = existing[0];
         // Never pull remote totals into the local run — that poisoned saves when
         // a higher (sometimes cheated) board score existed for the same name.
-        if (Math.floor(totalBars) < remote.total_bars) {
+        if (cappedTotal() < Number(remote.total_bars)) {
           return; // keep the higher board score; leave local progress alone
         }
       }
@@ -7818,7 +7822,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
     try {
       const r = await ownedRpc('yzy_lb_submit', username, {
-        p_total_bars: Math.floor(totalBars), p_total_clicks: Math.floor(totalClicks),
+        p_total_bars: cappedTotal(), p_total_clicks: Math.floor(totalClicks),
         p_era: currentEra, p_twitter: twitterHandle || null });
       if (!r || !r.ok) { if (!silent) setSubmitStatus(r && r.reason === 'taken' ? "Name owned by another player" : "Submit failed"); return; }
       setSubmitStatus("✓ Score submitted");
@@ -7853,7 +7857,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         TABLE + "?select=username,total_bars,total_clicks,era,twitter_handle&order=" + sortCol + ".desc&limit=50",
         { headers: { "Range-Unit": "items", "Range": "0-49" } }
       );
-      lbData = rows || [];
+      lbData = (rows || []).map(r => Object.assign({}, r, { total_bars: Number(r.total_bars), total_clicks: Number(r.total_clicks) }));
     } catch(e) {
       if (e !== "done") lbData = [];
     }
@@ -8036,8 +8040,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function rankClicksNeeded() {
     if (!Number.isFinite(totalBars) || !Number.isFinite(totalClicks)) return 0;
     const need1 = totalBars > 1e12 ? 5000 - totalClicks : 0;
-    const need2 = Math.ceil(totalBars / 2e9) - totalClicks;
-    return Math.max(0, Math.ceil(need1), Math.ceil(need2));
+    return Math.max(0, Math.ceil(need1));
   }
   window.rankClicksNeeded = rankClicksNeeded;
   let rankToastShown = false;
@@ -8053,9 +8056,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
       return;
     }
     const n = rankClicksNeeded();
+    const atCap = Number.isFinite(totalBars) && totalBars >= SEASON_CAP;
     const msg = n > 0 ? 'Your score is paused on the ¥ Board — click ' + n.toLocaleString() + ' more time' + (n === 1 ? '' : 's') + ' to rank' : '';
     const el = document.getElementById('lb-rank-note');
-    if (el) { el.textContent = msg; el.style.display = n > 0 ? 'block' : 'none'; }
+    const shown = msg || (atCap ? 'Season cap reached — score locked at the cap' : '');
+    if (el) { el.textContent = shown; el.style.display = shown ? 'block' : 'none'; }
     if (n > 0 && !rankToastShown) {
       rankToastShown = true;              // once per session, never spammy
       const t = document.createElement('div');
@@ -8313,7 +8318,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       if (!Number.isFinite(bars) || bars < 0) bars = 0;
       if (!Number.isFinite(totalBars) || totalBars < 0) totalBars = 0;
       if (!Number.isFinite(totalClicks) || totalClicks < 0) totalClicks = 0;
-      if (totalBars > 5e13) totalBars = 5e13;
+      if (totalBars > SEASON_CAP) totalBars = SEASON_CAP;
       if (bars > totalBars) bars = totalBars;
       offlineBars = Number(obj.offlineBars) || 0;
       if (!Number.isFinite(offlineBars) || offlineBars < 0) offlineBars = 0;
@@ -8364,7 +8369,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       if (!Number.isFinite(bars) || bars < 0) bars = 0;
       if (!Number.isFinite(totalBars) || totalBars < 0) totalBars = 0;
       if (!Number.isFinite(totalClicks) || totalClicks < 0) totalClicks = 0;
-      if (totalBars > 5e13) totalBars = 5e13;
+      if (totalBars > SEASON_CAP) totalBars = SEASON_CAP;
       if (bars > totalBars) bars = totalBars;
       offlineBars = Number(obj.offlineBars) || 0;
       if (!Number.isFinite(offlineBars) || offlineBars < 0) offlineBars = 0;
@@ -8996,8 +9001,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   // ── OFFLINE EARNINGS ──
   // Award = gen-only bars/sec × elapsed (clamped 60s..8h) × 0.5. Never counts
-  // as clicks, never pushes totalBars past the 50T season cap.
-  const OFF_MIN_MS = 60 * 1000, OFF_MAX_MS = 8 * 3600 * 1000, OFF_EFF = 0.5, SEASON_CAP = 5e13;
+  // as clicks, never pushes totalBars past the season cap (SEASON_CAP).
+  const OFF_MIN_MS = 60 * 1000, OFF_MAX_MS = 8 * 3600 * 1000, OFF_EFF = 0.5;
   let offlineReady = false, hiddenAt = 0, hiddenTotal = 0;
   function aliveKey()   { return getSaveKey() + '_alive'; }
   function claimedKey() { return getSaveKey() + '_offclaim'; }
