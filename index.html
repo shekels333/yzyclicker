@@ -40,7 +40,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 <meta name="twitter:title"       content="YzY CLICKER" />
 <meta name="twitter:description" content="Unofficial Yeezy-era idle clicker. Drop bars, unlock eras, climb the ¥ Board." />
 <meta name="twitter:image"       content="https://yzyclicker.com/thumbnail.jpg" />
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&family=Special+Elite&family=Oswald:wght@700&family=Cinzel:wght@700;900&family=Cinzel+Decorative:wght@700;900&family=Bodoni+Moda:ital,wght@0,700;0,900;1,700&family=UnifrakturMaguntia&family=Metamorphous&family=Caesar+Dressing&family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&family=Special+Elite&family=Oswald:wght@700&family=Cinzel:wght@700;900&family=Cinzel+Decorative:wght@700;900&family=Bodoni+Moda:ital,wght@0,700;0,900;1,700&family=UnifrakturMaguntia&family=Metamorphous&family=Caesar+Dressing&family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
   html, body { height: 100%; overflow: hidden; font-family: var(--heading-font, 'Playfair Display', serif); }
@@ -1438,6 +1438,18 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 #offline-modal .om-btn{background:var(--era-primary,#fff);color:#000;border:0;border-radius:8px;padding:10px 28px;font-weight:700;letter-spacing:.1em;cursor:pointer;font-family:inherit;font-size:14px}
 #lb-rank-note{display:none;margin:4px 0 6px;padding:6px 10px;border:1px solid var(--era-primary,#fff);border-radius:6px;color:var(--era-accent,#fff);font-size: 11px;letter-spacing:.04em;text-align:center font-family: var(--small-font, var(--mono-font));}
 #rank-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99998;background:#0b0b0b;border:1px solid var(--era-primary,#fff);color:var(--era-accent,#fff);padding:10px 16px;border-radius:8px;font-size:12px;max-width:calc(100vw - 32px);text-align:center;pointer-events:none}
+
+/* Readable UI font for settings/profile modals in every era */
+#settings-overlay,#settings-overlay *,#profile-modal-overlay,#profile-modal-overlay *,#edit-modal-overlay,#edit-modal-overlay *{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif!important;font-style:normal!important;text-shadow:none!important}
+#settings-modal{font-size:13px!important;line-height:1.45;color:#eee}
+#settings-modal h2,#profile-modal h2{font-size:18px!important;font-weight:700!important;letter-spacing:.06em!important;text-transform:none!important;color:#fff!important}
+#settings-modal .sm-label{font-size:11px!important;font-weight:600!important;letter-spacing:.08em!important;text-transform:uppercase!important;color:rgba(255,255,255,.6)!important}
+#settings-modal .sm-btn,#settings-modal button,#profile-modal button{font-size:13px!important;font-weight:500!important;letter-spacing:.02em!important;text-transform:none!important}
+#settings-modal input,#settings-modal textarea,#profile-modal input{font-size:13px!important;letter-spacing:.02em!important}
+#settings-modal #sm-import-input{font-size:12px!important}
+#settings-modal div,#settings-modal span{letter-spacing:normal}
+#settings-modal [style*="font-size:10px"],#settings-modal [style*="font-size:11px"],#sm-save-status,#sm-import-msg{font-size:12px!important;opacity:.85}
+#profile-modal .pm-sub,#profile-modal .pm-err{font-size:12px!important;letter-spacing:.04em!important}
 </style>
 
 </head>
