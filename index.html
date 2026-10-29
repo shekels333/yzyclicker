@@ -352,6 +352,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
   body.era-ye #counter-bps      { text-shadow: 0 0 12px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.6) !important; color: #4eff9a !important; }
   body.era-ye .gen-name         { text-shadow: 0 1px 4px rgba(0,0,0,0.5) !important; }
   body.era-ye .gen-desc         { text-shadow: none !important; }
+  body.era-ye .gen-total        { text-shadow: none !important; }
   body.era-ye #right-panel      { backdrop-filter: blur(2px) !important; -webkit-backdrop-filter: blur(2px) !important; background: rgba(18,24,32,0.17) !important; }
   body.era-jik #counter-val      { text-shadow: 0 0 24px rgba(245,216,96,0.55), 0 2px 6px rgba(0,0,40,0.55) !important; }
   body.era-jik #header-title     { text-shadow: 0 0 18px rgba(245,216,96,0.45), 0 2px 4px rgba(0,0,40,0.45) !important; }
@@ -478,6 +479,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
   #main-wrap.mbdtf-dark-mode .gen-name         { color: #ffffff !important; }
   #main-wrap.mbdtf-dark-mode .gen-desc         { color: rgba(255,255,255,0.5) !important; }
   #main-wrap.mbdtf-dark-mode .gen-rate         { color: rgba(255,255,255,0.7) !important; }
+  #main-wrap.mbdtf-dark-mode .gen-total        { color: rgba(255,255,255,0.7) !important; }
   #main-wrap.mbdtf-dark-mode .gen-cost         { color: #ffffff !important; }
   #main-wrap.mbdtf-dark-mode .gen-count        { background: #ffffff !important; color: #000 !important; }
   #main-wrap.mbdtf-dark-mode .upg-card         { background: rgba(255,255,255,0.04) !important; border-color: rgba(255,255,255,0.12) !important; }
@@ -593,6 +595,9 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
   .gen-name { font-family: var(--heading-font); font-weight: 700; font-size: 18px; transition: color 1s; }
   .gen-desc { font-family: var(--small-font, var(--mono-font)); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gen-rate { font-family: var(--small-font, var(--mono-font)); font-size: 11px; margin-top: 1px; transition: color 1s; }
+  .gen-total { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 10.5px; font-weight: 500; line-height: 1.35; margin-top: 1px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; transition: color 1s; }
+  .gen-total.zero { opacity: 0.4; }
+  .gen-total.hidden { visibility: hidden; }
   .gen-right { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
   .gen-cost {
     font-family: var(--mono-font); font-size: 13px; font-weight: 700;
@@ -2216,8 +2221,12 @@ function getLiveBps() {
   return getBps() + clickBps;
 }
 
+// Effective bars/sec from all owned units of one generator (all multipliers applied).
+// getBps() is exactly the sum of these, so per-card totals always add up to the header rate.
+function genBps(g) { return (owned[g.id] || 0) * g.baseRate * genMult; }
+function genTotalLabel(g) { const v = genBps(g); return v > 0 ? `Producing ${formatBps(v)} b/s` : "Producing 0 b/s"; }
 function getBps() {
-  return GENERATORS.reduce((s, g) => s + (owned[g.id] || 0) * g.baseRate * genMult, 0);
+  return GENERATORS.reduce((s, g) => s + genBps(g), 0);
 }
 
 // Rebuild clickPower/genMult from owned upgrades + fashion so imported/edited
@@ -2702,7 +2711,10 @@ function renderShop() {
       const rateEl = document.createElement("div"); rateEl.className = "gen-rate"; rateEl.style.color = T.primary;
       rateEl.textContent = isLocked ? `Unlocks at ${formatNum(unitCost)} bars` : `${+(gen.baseRate * genMult).toPrecision(2)} b/s each`;
       const infoEl = document.createElement("div"); infoEl.className = "gen-info";
-      infoEl.appendChild(nameEl); infoEl.appendChild(descEl); infoEl.appendChild(rateEl);
+      const totalEl = document.createElement("div"); totalEl.className = "gen-total" + (count ? "" : " zero") + (isLocked ? " hidden" : "");
+      totalEl.style.color = T.primary;
+      totalEl.textContent = genTotalLabel(gen);
+      infoEl.appendChild(nameEl); infoEl.appendChild(descEl); infoEl.appendChild(rateEl); infoEl.appendChild(totalEl);
 
       const costEl  = document.createElement("div"); costEl.className = "gen-cost"; costEl.style.color = canAfford ? T.accent : T.muted;
       costEl.textContent = "¥" + formatNum(cost);
@@ -2868,6 +2880,7 @@ function updateShopValues() {
       row.style.setProperty("--gen-glow",   canAfford ? `${T.primary}44` : "transparent");
 
       const rateEl  = row.querySelector(".gen-rate");  if (rateEl && !isLocked) rateEl.textContent = `${+(gen.baseRate * genMult).toPrecision(2)} b/s each`;
+      const totalEl = row.querySelector(".gen-total"); if (totalEl) { const t = genTotalLabel(gen); if (totalEl.textContent !== t) totalEl.textContent = t; totalEl.classList.toggle("zero", !count); }
       const costEl  = row.querySelector(".gen-cost");  if (costEl)  { costEl.textContent = "¥" + formatNum(cost); costEl.style.color = canAfford ? T.accent : T.muted; }
       const countEl = row.querySelector(".gen-count"); if (countEl) { countEl.textContent = count; countEl.style.background = canAfford ? T.tabActiveBg : T.faint; countEl.style.color = canAfford ? T.tabActiveColor : T.muted; }
     });
