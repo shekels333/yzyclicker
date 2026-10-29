@@ -194,7 +194,7 @@
     100% { transform: scale(1);    box-shadow: 0 0 0px transparent; }
   }
   .purchase-flash { animation: purchaseFlash 0.42s var(--ease-spring) forwards; pointer-events: none; }
-  #shop { flex: 1; overflow-y: auto; padding-bottom: 16px; overscroll-behavior: contain; }
+  #shop { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: 16px; overscroll-behavior: contain; }
   /* Tab content settles in on switch */
   #shop.tab-enter > * { animation: tabEnter 0.28s var(--ease-out) both; }
   @keyframes tabEnter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
