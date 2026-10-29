@@ -2076,7 +2076,7 @@ const GENERATORS = [
   { id:"aldi",        name:"Aldi Partnership",  emoji:"XIII", baseCost:25000000000,      baseRate:90000,   desc:"Billionaire. Still shops at Aldi." },
   { id:"rocketship",  name:"Rocket Ship",       emoji:"XIV",  baseCost:175000000000,     baseRate:280000,   desc:"Elon, where my rocket ship?" },
   { id:"chromemaybach",name:"Chrome Maybach",   emoji:"XV",   baseCost:1200000000000,    baseRate:1100000, desc:"How they can't see me in public? I'm driving an all chrome Maybach." },
-  { id:"bullymoon",   name:"Bully Moon",        emoji:"XVI",  baseCost:5000000000000,    baseRate:2600000,  desc:"Soon" },
+  { id:"bullymoon",   name:"Bully Moon",        emoji:"XVI",  baseCost:5000000000000,    baseRate:4300000,  desc:"Soon" },
   { id:"trillionbear", name:"Trillionbear",     emoji:"XVII", baseCost:12000000000000,   baseRate:10000000, desc:"I guess we'll never know." },
 ];
 
@@ -2108,6 +2108,11 @@ const UPGRADES = [
   // ── Endgame (100B+) ───────────────────────────────────────────
   { id:"up11", name:"Live in Korea",             cost:150000000000, desc:"2025 · Seoul goes off.",                              type:"click", mult:4  },
   { id:"up12", name:"Live in Mexico",            cost:300000000000, desc:"2026 · Mexico City shakes.",                          type:"click",  mult:3  },
+  // ── Trillionbear (2T+) ────────────────────────────────────────
+  { id:"up13", name:"Vultures Rave",             cost:2000000000000,      desc:"2024 · United Center goes dark. Ty Dolla $ign on deck.", type:"gen",  mult:2  },
+  { id:"up14", name:"Live in Haikou",            cost:20000000000000,     desc:"2024 · Two nights. A whole island sings along.",        type:"gen",  mult:2  },
+  { id:"up15", name:"Bully Premiere",            cost:200000000000000,    desc:"2025 · The film drops. The moon watches.",              type:"gen",  mult:2  },
+  { id:"up16", name:"Trillionbear Ascension",    cost:2000000000000000,   desc:"∞ · Beyond the moon. Beyond the board.",                type:"both", mult:3  },
 ];
 
 const FASHION = [
@@ -7379,7 +7384,7 @@ function updateCounters() {
   if (allUnlocked) {
     document.getElementById("progress-bar-wrap").style.display = "none";
     document.getElementById("footer-mid").style.color = T.accent;
-    document.getElementById("footer-mid").textContent = "🏆 ALL ERAS UNLOCKED — ONLY 2 MORE DAYS REMAINING";
+    document.getElementById("footer-mid").textContent = "🏆 ALL ERAS UNLOCKED — CLIMB THE ¥ BOARD";
   } else {
     document.getElementById("progress-bar-wrap").style.display = "block";
     const prevThreshold = nextLockedIdx > 0 ? ALBUM_THEMES[nextLockedIdx - 1].threshold : 0;
