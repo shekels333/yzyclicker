@@ -1425,6 +1425,8 @@
 #offline-modal .om-amt{font-size:20px;margin:10px 0 16px}
 #offline-modal .om-amt b{color:var(--era-primary,#fff)}
 #offline-modal .om-btn{background:var(--era-primary,#fff);color:#000;border:0;border-radius:8px;padding:10px 28px;font-weight:700;letter-spacing:.1em;cursor:pointer;font-family:inherit;font-size:14px}
+#lb-rank-note{display:none;margin:4px 0 6px;padding:6px 10px;border:1px solid var(--era-primary,#fff);border-radius:6px;color:var(--era-accent,#fff);font-size:11px;letter-spacing:.04em;text-align:center}
+#rank-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99998;background:#0b0b0b;border:1px solid var(--era-primary,#fff);color:var(--era-accent,#fff);padding:10px 16px;border-radius:8px;font-size:12px;max-width:calc(100vw - 32px);text-align:center;pointer-events:none}
 </style>
 
 </head>
@@ -7503,8 +7505,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (totalBars < 0 || totalClicks < 0) return;
     // Soft season cap below the old "just under 100T" forge magnet
     if (totalBars > 5e13 || totalClicks > 5e7) return;
-    if (totalBars > 1e12 && totalClicks < 5000) return;
-    if (totalClicks > 0 && (totalBars / totalClicks) > 2e9) return;
+    if (totalBars > 1e12 && totalClicks < 5000) { updateRankNote(); return; }
+    if (totalClicks > 0 && (totalBars / totalClicks) > 2e9) { updateRankNote(); return; }
 
     // ── Only submit if our score is higher than what's on the leaderboard ──
     // Prevents a device with an old/lower save from overwriting a higher
@@ -7608,6 +7610,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
       ${CONFIGURED ? `<button id="lb-submit-btn" onclick="window.lbManualSubmit()" style="font-family:var(--mono-font,'Space Mono',monospace);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:transparent;border:1px solid ${T.primary};border-radius:2px;color:${T.primary};padding:5px 12px;cursor:pointer;opacity:0.8;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8">↑ Submit</button>` : ""}
     `;
     wrap.appendChild(submitRow);
+
+    // "Click more to rank" notice (filled by updateRankNote)
+    const rankNote = document.createElement("div");
+    rankNote.id = "lb-rank-note";
+    wrap.appendChild(rankNote);
 
     // List container
     const list = document.createElement("div");
@@ -7721,6 +7728,31 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // ── Auto-submit hooks ──
   // Called by save system on every autosave + manual save
   window.lbAutoSubmit = function() { submitScore(true); };
+
+  // ── Rank pause notice: explains the clicks-based board rules (rules unchanged) ──
+  function rankClicksNeeded() {
+    if (!Number.isFinite(totalBars) || !Number.isFinite(totalClicks)) return 0;
+    const need1 = totalBars > 1e12 ? 5000 - totalClicks : 0;
+    const need2 = Math.ceil(totalBars / 2e9) - totalClicks;
+    return Math.max(0, Math.ceil(need1), Math.ceil(need2));
+  }
+  window.rankClicksNeeded = rankClicksNeeded;
+  let rankToastShown = false;
+  function updateRankNote() {
+    const n = rankClicksNeeded();
+    const msg = n > 0 ? 'Your score is paused on the ¥ Board — click ' + n.toLocaleString() + ' more time' + (n === 1 ? '' : 's') + ' to rank' : '';
+    const el = document.getElementById('lb-rank-note');
+    if (el) { el.textContent = msg; el.style.display = n > 0 ? 'block' : 'none'; }
+    if (n > 0 && !rankToastShown) {
+      rankToastShown = true;              // once per session, never spammy
+      const t = document.createElement('div');
+      t.id = 'rank-toast'; t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 6000);
+    }
+  }
+  window.updateRankNote = updateRankNote;
+  setInterval(updateRankNote, 1000);
 
   // Manual submit — resets throttle so button always works
   window.lbManualSubmit = async function() {
