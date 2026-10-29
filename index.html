@@ -4350,6 +4350,9 @@ function resetEraBonus() {
   eraBonusTimer = null;
   if (eraBonusActive) { clickPower /= ERA_BONUS_MULT; eraBonusActive = false; }
   genericClickCount = 0;
+  // Clear the bonus glow ring too (it carries the previous era's accent colour, e.g. Yeezus red)
+  { const btn = document.getElementById("click-btn"); if (btn) { btn.classList.remove("era-bonus-glow"); btn.style.removeProperty("--bonus-glow"); } }
+  if (typeof resetKSGGhostGlow === "function") resetKSGGhostGlow();
   if (ALBUM_THEMES[albumIdx].id === "ye") {
     yeClickCount = 0;
     auroraClickLevel = 0;
