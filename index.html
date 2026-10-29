@@ -1062,7 +1062,8 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
     /* Hide the floating era-dot nav entirely on mobile */
     #era-nav { display: none !important; }
 
-    #header-title { font-size: 13px; letter-spacing: 1.5px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #header-title { font-size: 13px; letter-spacing: 1.5px; flex: 1; min-width: 0; white-space: nowrap; overflow: visible; }
+    #header-title .ht-l { will-change: auto; }
 
     /* Profile: icon-only, no name text on mobile */
     #header-profile { padding: 4px 6px; gap: 0; border-color: rgba(255,255,255,0.1); }
@@ -1171,6 +1172,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 
     /* ── Footer: smaller; era progress text on its own compact row ── */
     #footer-text   { padding: 4px 10px; font-size: 1px; letter-spacing: 1.0px; font-family: var(--small-font, var(--mono-font));}
+    #footer-text > span:not(#footer-mid) { display: none !important; }
     #footer-mid    { grid-column: 1 / -1; grid-row: 1; font-size: 9px; letter-spacing: 1px; text-align: center; padding: 2px 70px 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #progress-bar-wrap { height: 5px; }
     #footer { padding-bottom: env(safe-area-inset-bottom, 0px); }
