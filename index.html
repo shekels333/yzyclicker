@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>try{if(Object.keys(localStorage).some(k=>k.indexOf('yzy_save_v1_')===0))document.documentElement.classList.add('yzy-booting');}catch(e){}setTimeout(function(){document.documentElement.classList.remove('yzy-booting')},3000);</script>
+<style>html.yzy-booting body{visibility:hidden}</style>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>YzY CLICKER</title>
@@ -7207,8 +7209,22 @@ function updateUI() {
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 
-const initTheme = ALBUM_THEMES[0];
+// Returning players: apply the saved era synchronously so era 0 never flashes.
+function readSavedAlbumIdx() {
+  try {
+    const u = localStorage.getItem('yzy_username') || 'default';
+    const raw = localStorage.getItem('yzy_save_v1_' + u.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+    if (!raw) return 0;
+    const o = JSON.parse(raw);
+    const i = (o && o.v === 2) ? Number(o.albumIdx) || 0 : 0;
+    return (i >= 0 && i < ALBUM_THEMES.length) ? Math.floor(i) : 0;
+  } catch(e) { return 0; }
+}
+albumIdx = readSavedAlbumIdx();
+window._yzyBootIdx = albumIdx;
+const initTheme = ALBUM_THEMES[albumIdx];
 applyTheme(initTheme, true);
+document.documentElement.classList.remove('yzy-booting');
 setRandomQuote(initTheme, true);
 // Seed unlock count so first real unlock triggers the transition
 lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || totalBars >= a.threshold).length;
@@ -8363,7 +8379,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     let startupObj = null;
     if (localObj && applyGame(localObj)) {
       startupObj = localObj;
-      setTimeout(() => { switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
+      setTimeout(() => { if (window._yzyBootIdx !== albumIdx) switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
     }
 
     // Then check cloud — only if newer than local (never prefer higher bars alone;
@@ -8378,7 +8394,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
           startupObj = cloudObj;
           // Also update localStorage so next load is instant
           try { localStorage.setItem(getSaveKey(), JSON.stringify(cloudObj)); } catch(e) {}
-          setTimeout(() => { switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
+          setTimeout(() => { if (window._yzyBootIdx !== albumIdx) switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
         }
       }
     }
