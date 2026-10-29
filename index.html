@@ -8017,7 +8017,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
     return null;
   }
   // ── Season: saves without the current marker are legacy and start fresh ──
-  const SEASON = 2, SEASON_START = '2026-10-29';
+  // Internal marker stays 2 (saves already carry it); shown to players as Season 1.
+  const SEASON = 2, SEASON_LABEL = 'Season 1', SEASON_START = '2026-10-29';
   window.YZY_SEASON = SEASON;
   function isLegacySave(o) { return !o || o.season !== SEASON; }
   function freshSeasonSave(o) {
@@ -8029,7 +8030,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function seasonNotice() {
     const k = 'yzy_season_notice_' + SEASON;
     try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch(e) {}
-    setTimeout(() => { yzyToast('New season! Old progress was reset so everyone starts even. Your old save is in Settings → Restore Backup.'); const el = document.getElementById('yzy-save-toast'); if (el) { clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, 10000); } }, 700);
+    setTimeout(() => { yzyToast('Season 1 is here! Beta progress was reset so everyone starts even. Your old save is in Settings → Restore backup.'); const el = document.getElementById('yzy-save-toast'); if (el) { clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, 10000); } }, 700);
   }
   // Archive a legacy save and write the fresh one in its place. Returns the fresh save.
   function archiveLegacy(o) {
@@ -8320,7 +8321,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (targetKey === curKey) existingBars = totalBars;
     else { try { const e = normalizeSave(JSON.parse(localStorage.getItem(targetKey) || 'null')); if (e) existingBars = Number(e.totalBars) || 0; } catch(e) {} }
     const newBars = legacyCode ? 0 : (Number(obj.totalBars) || 0);
-    if (legacyCode && !window.confirm('This save code is from before the new season (¥' + formatNum(Number(obj.totalBars) || 0) + '). Old progress does not carry over: importing it gives you the name ' + importedName.toUpperCase() + ' with a fresh start, and the old save is kept as an archived backup.\n\nContinue?')) { setImportMsg('Import cancelled — nothing changed.', false); return; }
+    if (legacyCode && !window.confirm('This save code is from the beta, before Season 1 (¥' + formatNum(Number(obj.totalBars) || 0) + '). Old progress does not carry over: importing it gives you the name ' + importedName.toUpperCase() + ' with a fresh start, and the old save is kept as an archived backup.\n\nContinue?')) { setImportMsg('Import cancelled — nothing changed.', false); return; }
     if (existingBars > newBars) {
       const ok = window.confirm('This save code has ¥' + formatNum(newBars) + ' lifetime bars, but your profile ' +
         importedName.toUpperCase() + ' already has ¥' + formatNum(existingBars) + '.\n\nImport anyway? Your current save will be kept as a backup (Settings → Restore Backup).');
@@ -8566,7 +8567,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   // ── Restore Backup ──
   const REASONS = { 'auto':'auto', 'before-overwrite':'before overwrite', 'before-import':'before import', 'before-reset':'before reset',
-    'before-new-game':'before new game', 'before-restore':'before restore', 'unreadable':'unreadable save', 'sanitized':'gens removed by check', 'legacy-v1':'old v1 save', 'legacy':'legacy (pre-season)' };
+    'before-new-game':'before new game', 'before-restore':'before restore', 'unreadable':'unreadable save', 'sanitized':'gens removed by check', 'legacy-v1':'old v1 save', 'legacy':'beta (archived)' };
   function renderBackups() {
     const list = document.getElementById('sm-backups-list');
     list.innerHTML = '';
@@ -8590,9 +8591,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
       btn.appendChild(top); btn.appendChild(sub);
       if (!o) btn.disabled = true;
       if (o && isLegacySave(o)) {
-        sub.textContent += '  ·  archived, view only';
+        sub.textContent += '  ·  view only';
         btn.style.opacity = '.6';
-        btn.title = 'Pre-season save — kept for reference, cannot be restored';
+        btn.title = 'Beta save — kept for reference, cannot be restored';
       }
       btn.addEventListener('click', () => restoreBackup(o, name));
       list.appendChild(rowWrap(btn, 'Delete this backup', () => {
@@ -8617,7 +8618,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
  if (!o) return;
     if (isLegacySave(o)) {
       msg.style.color = '#e8b040';
-      msg.textContent = 'That save is from before the new season (¥' + formatNum(Number(o.totalBars) || 0) + ', ' + (Number(o.totalClicks) || 0).toLocaleString() + ' clicks). It is archived for reference and cannot be restored — everyone starts even this season.';
+      msg.textContent = 'That save is from the beta (¥' + formatNum(Number(o.totalBars) || 0) + ', ' + (Number(o.totalClicks) || 0).toLocaleString() + ' clicks). It is archived for reference and cannot be restored — everyone starts even in Season 1.';
       return;
     }
     if (!window.confirm('Restore ' + name.toUpperCase() + ' with ¥' + formatNum(Number(o.totalBars) || 0) + ' lifetime bars?\n\nYour current game is backed up first, so you can undo this.')) return;
