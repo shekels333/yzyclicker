@@ -1990,8 +1990,52 @@ function recomputeMultsFromPurchases() {
 }
 window.recomputeMultsFromPurchases = recomputeMultsFromPurchases;
 
+const MAX_OWNED_PER_GEN = 250;
+
+function minSpendForOwned(ownedMap) {
+  let spend = 0;
+  for (const gen of GENERATORS) {
+    const n = Math.max(0, Math.min(MAX_OWNED_PER_GEN, Math.floor(Number(ownedMap[gen.id]) || 0)));
+    for (let i = 0; i < n; i++) {
+      const c = Math.floor(gen.baseCost * Math.pow(1.15, i));
+      if (!Number.isFinite(c)) return Infinity;
+      spend += c;
+      if (spend > 1e16) return spend;
+    }
+  }
+  UPGRADES.forEach(upg => {
+    if (boughtUpgrades.has(upg.id)) spend += upg.cost;
+  });
+  FASHION.forEach(item => {
+    if (boughtFashion.has(item.id)) spend += item.cost;
+  });
+  return spend;
+}
+
+function sanitizeOwnedMap(raw, lifetimeBars) {
+  const out = {};
+  const ids = new Set(GENERATORS.map(g => g.id));
+  if (raw && typeof raw === 'object') {
+    Object.keys(raw).forEach(k => {
+      if (!ids.has(k)) return;
+      let n = Math.floor(Number(raw[k]) || 0);
+      if (!Number.isFinite(n) || n < 0) n = 0;
+      if (n > MAX_OWNED_PER_GEN) n = MAX_OWNED_PER_GEN;
+      out[k] = n;
+    });
+  }
+  const life = Number.isFinite(lifetimeBars) ? Math.max(0, lifetimeBars) : 0;
+  // Forged owned → insane BPS; clear gens if spend can't fit lifetime bars.
+  if (minSpendForOwned(out) > life * 1.25 + 1000) return {};
+  return out;
+}
+window.sanitizeOwnedMap = sanitizeOwnedMap;
+
 function getGenCost(gen) {
-  return Math.floor(gen.baseCost * Math.pow(1.15, owned[gen.id] || 0));
+  const n = owned[gen.id] || 0;
+  if (n >= MAX_OWNED_PER_GEN) return Infinity;
+  const c = Math.floor(gen.baseCost * Math.pow(1.15, n));
+  return Number.isFinite(c) ? c : Infinity;
 }
 
 function getBatchCost(gen, qty) {
@@ -7167,11 +7211,10 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // Sanity check — reject invalid / likely-cheated scores before submitting
     if (!Number.isFinite(totalBars) || !Number.isFinite(totalClicks)) return;
     if (totalBars < 0 || totalClicks < 0) return;
-    if (totalBars > 1e14 || totalClicks > 5e7) return;
-    // Endgame AFK can mint huge bars; still reject absurd bars-per-click with almost no clicking
-    // (typical honest endgame still has thousands of clicks from play).
-    if (totalClicks < 100 && totalBars > 1e9) return;
-    if (totalClicks > 0 && (totalBars / totalClicks) > 1e10) return;
+    // Soft season cap below the old "just under 100T" forge magnet
+    if (totalBars > 5e13 || totalClicks > 5e7) return;
+    if (totalBars > 1e12 && totalClicks < 5000) return;
+    if (totalClicks > 0 && (totalBars / totalClicks) > 2e9) return;
 
     // ── Only submit if our score is higher than what's on the leaderboard ──
     // Prevents a device with an old/lower save from overwriting a higher
@@ -7534,15 +7577,16 @@ document.getElementById("shop").addEventListener("click", (e) => {
       bars        = Number(obj.bars)        || 0;
       totalBars   = Number(obj.totalBars)   || 0;
       totalClicks = Number(obj.totalClicks) || 0;
+      if (!Number.isFinite(bars) || bars < 0) bars = 0;
+      if (!Number.isFinite(totalBars) || totalBars < 0) totalBars = 0;
+      if (!Number.isFinite(totalClicks) || totalClicks < 0) totalClicks = 0;
+      if (totalBars > 5e13) totalBars = 5e13;
+      if (bars > totalBars) bars = totalBars;
       clickPower  = Number(obj.clickPower)  || 1;
       genMult     = Number(obj.genMult)     || 1;
-
-      if (obj.owned && typeof obj.owned === 'object') {
-        owned = {};
-        Object.keys(obj.owned).forEach(k => { owned[k] = Number(obj.owned[k]) || 0; });
-      }
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
       boughtFashion  = new Set(Array.isArray(obj.fashion)  ? obj.fashion  : []);
+      owned = sanitizeOwnedMap(obj.owned, totalBars);
       if (obj.lastMilestone !== undefined) lastMilestone = Number(obj.lastMilestone);
       if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
 
@@ -7578,14 +7622,16 @@ document.getElementById("shop").addEventListener("click", (e) => {
       bars        = Number(obj.bars)        || 0;
       totalBars   = Number(obj.totalBars)   || 0;
       totalClicks = Number(obj.totalClicks) || 0;
+      if (!Number.isFinite(bars) || bars < 0) bars = 0;
+      if (!Number.isFinite(totalBars) || totalBars < 0) totalBars = 0;
+      if (!Number.isFinite(totalClicks) || totalClicks < 0) totalClicks = 0;
+      if (totalBars > 5e13) totalBars = 5e13;
+      if (bars > totalBars) bars = totalBars;
       clickPower  = Number(obj.clickPower)  || 1;
       genMult     = Number(obj.genMult)     || 1;
-      if (obj.owned && typeof obj.owned === 'object') {
-        owned = {};
-        Object.keys(obj.owned).forEach(k => { owned[k] = Number(obj.owned[k]) || 0; });
-      }
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
       boughtFashion  = new Set(Array.isArray(obj.fashion)  ? obj.fashion  : []);
+      owned = sanitizeOwnedMap(obj.owned, totalBars);
       if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
       const idx = Number(obj.albumIdx) || 0;
       if (idx >= 0 && idx < ALBUM_THEMES.length) {
@@ -7647,21 +7693,23 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const json = decodeURIComponent(atob(raw));
       const obj  = JSON.parse(json);
       if (!obj || obj.v !== 1) throw new Error('invalid');
-      if (applyGame(obj)) {
 
-        // ── Save current profile before switching ──
-        try {
-          const curData = JSON.stringify({
-            v:1, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
-            username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
-            owned: Object.assign({}, owned),
-            upgrades: Array.from(boughtUpgrades),
-            fashion: Array.from(boughtFashion),
-            lastMilestone: lastMilestone,
-            ts: Date.now()
-          });
-          localStorage.setItem(getSaveKey(), curData);
-        } catch(e) {}
+      // Snapshot CURRENT profile before applyGame mutates state
+      // (old order overwrote the previous username key with imported totals).
+      try {
+        const curData = JSON.stringify({
+          v:1, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
+          username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
+          owned: Object.assign({}, owned),
+          upgrades: Array.from(boughtUpgrades),
+          fashion: Array.from(boughtFashion),
+          lastMilestone: lastMilestone,
+          ts: Date.now()
+        });
+        localStorage.setItem(getSaveKey(), curData);
+      } catch(e) {}
+
+      if (applyGame(obj)) {
 
         // ── Switch to imported profile ──
         // Use embedded username if present, otherwise fall back to a generated name
@@ -7993,14 +8041,13 @@ document.getElementById("shop").addEventListener("click", (e) => {
       setTimeout(() => { switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
     }
 
-    // Then check cloud — if cloud save is newer or has a higher score, use it
+    // Then check cloud — only if newer than local (never prefer higher bars alone;
+    // that re-infected devices from poisoned high-score cloud saves).
     const cloudObj = await pullCloudSave();
     if (cloudObj && cloudObj.v === 1) {
       const localTs    = localObj ? (localObj.ts || 0) : 0;
       const cloudTs    = cloudObj.ts || 0;
-      const localBars  = localObj ? (localObj.totalBars || 0) : 0;
-      const cloudBars  = cloudObj.totalBars || 0;
-      const useCloud   = cloudBars > localBars || cloudTs > localTs;
+      const useCloud   = !localObj || cloudTs > localTs;
       if (useCloud) {
         if (applyGame(cloudObj)) {
           // Also update localStorage so next load is instant
