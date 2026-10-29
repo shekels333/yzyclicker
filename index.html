@@ -2986,25 +2986,11 @@ document.getElementById("click-wrap").addEventListener("click", (e) => {
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   const T = ALBUM_THEMES[albumIdx];
-  // Fast-click merge: if the last +N is still fresh, grow it instead of stacking a new one (less spam)
-  const _nowF = performance.now();
-  const _lf = window._lastFloat;
-  const _merge = !!(_lf && _lf.el.isConnected && (_nowF - _lf.t) < 110 && _lf.era === T.id);
-  const el = _merge ? _lf.el : document.createElement("div");
-  if (_merge) {
-    _lf.v += clickPower; _lf.t = _nowF;
-    el.textContent = "+" + formatNum(_lf.v);
-    el.classList.add("combo");
-    el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
-  } else {
-    window._lastFloat = { el, v: clickPower, t: _nowF, era: T.id };
-  }
-  el.className = (_merge ? "float-num combo" : "float-num");
+  const el = document.createElement("div");
+  el.className = "float-num";
   el.style.position = "fixed";
-  if (!_merge) {
-    el.style.left = (e.clientX - 14) + "px";
-    el.style.top  = (e.clientY - 14) + "px";
-  }
+  el.style.left = (e.clientX - 14) + "px";
+  el.style.top  = (e.clientY - 14) + "px";
   el.style.color = (T.id === "mbdtf" && mbdtfInverted) ? "#ffffff" : T.floatColor;
   if (T.id === "yeezus") {
     el.style.color = "#ff4433";
@@ -3023,12 +3009,10 @@ document.getElementById("click-wrap").addEventListener("click", (e) => {
   if (T.id === "ksg") {
     el.style.textShadow = "-1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff";
   }
-  if (!_merge) {
-    el.textContent = "+" + formatNum(clickPower);
-    document.body.appendChild(el);
-    el.addEventListener("animationend", () => el.remove());
-    setTimeout(() => el.remove(), 1600); // safety net (reduced-motion / tab hidden)
-  }
+  el.textContent = "+" + formatNum(clickPower);
+  document.body.appendChild(el);
+  el.addEventListener("animationend", () => el.remove());
+  setTimeout(() => el.remove(), 1600); // safety net (reduced-motion / tab hidden)
 
   // ── Era click-bonus counters ALWAYS run (lite only skips FX) ─────────────
   // Dedicated counters / activate — never gate these behind liteMode.
@@ -4188,8 +4172,6 @@ function activateClickBonus() {
   if (!eraBonusActive) {
     eraBonusActive = true;
     clickPower *= ERA_BONUS_MULT;
-    // Break float-merge so the next +N clearly shows the 1.2× bump
-    window._lastFloat = null;
     // Pulse button glow on activation
     const tbGlow = T.id === "trillionbear";
     const yeGlow = T.id === "ye";
