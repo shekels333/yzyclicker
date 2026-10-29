@@ -1550,6 +1550,13 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
         </div>
 
         <div class="sm-section">
+          <div class="sm-label">Backups</div>
+          <button class="sm-btn" id="sm-backup-btn"><span class="sm-icon">♻</span> Restore Backup</button>
+          <div id="sm-backups-list" style="display:none;flex-direction:column;gap:5px;max-height:180px;overflow-y:auto;margin-top:6px;"></div>
+          <div id="sm-backup-msg" style="font-size:11px;min-height:0;margin-top:4px;"></div>
+        </div>
+
+        <div class="sm-section">
           <div class="sm-label">Danger Zone</div>
           <button class="sm-btn danger" id="sm-reset-btn"><span class="sm-icon">🗑</span> Reset</button>
           <div id="sm-reset-confirm" style="display:none">
@@ -7366,11 +7373,17 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
     setUsername(val);
 
-    // Delete any cloud save under this name (safety net for pre-uniqueness-check saves)
-    try { if (window._cloudSaveDelete) window._cloudSaveDelete(val); } catch(e) {}
-
-    // Clear localStorage save key for this new user so nothing loads
-    try { if (window.getSaveKey) localStorage.removeItem(window.getSaveKey()); } catch(e) {}
+    // No cloud delete (a failed-open availability check could wipe someone
+    // else's save). Instead write a fresh local save with ts=now so an older
+    // cloud row under this name can't win on next load. Back up any local
+    // save already under this key first.
+    try {
+      if (window.getSaveKey) {
+        if (window._yzyBackupKey) window._yzyBackupKey(window.getSaveKey(), 'before-new-game');
+        localStorage.removeItem(window.getSaveKey());
+        if (window.saveGame) window.saveGame(true);
+      }
+    } catch(e) {}
 
     switchToAlbum(0);
     updateUI();
@@ -7396,6 +7409,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         const newKey = 'yzy_save_v1_' + newSlug;
         if (oldKey !== newKey) {
           const existing = localStorage.getItem(oldKey);
+          if (window._yzyBackupKey) window._yzyBackupKey(newKey, 'before-overwrite');
           if (existing) {
             localStorage.setItem(newKey, existing);
             localStorage.removeItem(oldKey);
@@ -7906,6 +7920,78 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // Expose for profile switching
   window.getSaveKey = getSaveKey;
 
+  // ── Save safety net: rolling + event backups (never wiped by Reset) ──
+  const SAVE_PREFIX = 'yzy_save_v1_', BAK_PREFIX = 'yzy_bak_';
+  const TAB_ID = Math.random().toString(36).slice(2);
+  let staleTab = false;          // another tab wrote our save; don't overwrite it
+  const lastAutoBak = {};
+  function slugOf(name) { return String(name || 'default').toLowerCase().replace(/[^a-z0-9]/g, '_'); }
+  function readBaks(slug) { try { const l = JSON.parse(localStorage.getItem(BAK_PREFIX + slug) || '[]'); return Array.isArray(l) ? l : []; } catch(e) { return []; } }
+  function backupRaw(slug, raw, reason) {
+    if (!raw) return false;
+    let list = readBaks(slug);
+    if (list.length && list[0].data === raw) return true;
+    list.unshift({ t: Date.now(), reason: reason, data: raw });
+    const auto = list.filter(b => b.reason === 'auto').slice(0, 3);
+    const evt  = list.filter(b => b.reason !== 'auto').slice(0, 5);
+    list = evt.concat(auto).sort((a, b) => b.t - a.t);
+    while (list.length) {
+      try { localStorage.setItem(BAK_PREFIX + slug, JSON.stringify(list)); return true; }
+      catch(e) { list.pop(); }
+    }
+    return false;
+  }
+  function backupKey(key, reason) {
+    try { const raw = localStorage.getItem(key); if (raw) return backupRaw(key.slice(SAVE_PREFIX.length), raw, reason); } catch(e) {}
+    return false;
+  }
+  window._yzyBackupKey = backupKey;
+  // Accept v2, and migrate v1 / unversioned saves that carry the same fields.
+  function normalizeSave(obj) {
+    if (!obj || typeof obj !== 'object') return null;
+    if (obj.v === 2) return obj;
+    if ((obj.v === 1 || obj.v === undefined) && Number.isFinite(Number(obj.totalBars)) && obj.totalBars !== null)
+      return Object.assign({}, obj, { v: 2 });
+    return null;
+  }
+  // Every local save write goes through here. If the write would replace a save
+  // with more lifetime bars (or an unreadable one), snapshot the old one first.
+  function writeSave(key, obj) {
+    const data = typeof obj === 'string' ? obj : JSON.stringify(obj);
+    const nobj = typeof obj === 'string' ? JSON.parse(obj) : obj;
+    let prev = null;
+    try { prev = localStorage.getItem(key); } catch(e) {}
+    if (prev) {
+      let po = null; try { po = normalizeSave(JSON.parse(prev)); } catch(e) {}
+      const slug = key.slice(SAVE_PREFIX.length);
+      if (!po) backupRaw(slug, prev, 'unreadable');
+      else if ((Number(po.totalBars) || 0) > (Number(nobj.totalBars) || 0) + 1) backupRaw(slug, prev, 'before-overwrite');
+      else if (!lastAutoBak[key] || Date.now() - lastAutoBak[key] > 10 * 60 * 1000) {
+        const head = readBaks(slug).find(b => b.reason === 'auto');
+        if (!head || Date.now() - head.t > 10 * 60 * 1000) backupRaw(slug, prev, 'auto');
+        lastAutoBak[key] = Date.now();
+      }
+    }
+    try { localStorage.setItem(key, data); }
+    catch(e) {
+      // Quota: drop rolling backups and retry once
+      try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k && k.startsWith(BAK_PREFIX)) { const l = readBaks(k.slice(BAK_PREFIX.length)).filter(b => b.reason !== 'auto'); localStorage.setItem(k, JSON.stringify(l)); } } } catch(_) {}
+      localStorage.setItem(key, data);
+    }
+  }
+  window._yzyWriteSave = writeSave;
+  function yzyToast(text, isErr) {
+    let el = document.getElementById('yzy-save-toast');
+    if (!el) {
+      el = document.createElement('div'); el.id = 'yzy-save-toast';
+      el.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;max-width:90vw;padding:10px 16px;border-radius:6px;font:700 12px/1.4 'Space Mono',monospace;letter-spacing:.3px;background:rgba(10,10,10,.94);border:1px solid rgba(255,255,255,.25);box-shadow:0 6px 24px rgba(0,0,0,.5);text-align:center;pointer-events:none;transition:opacity .3s";
+      document.body.appendChild(el);
+    }
+    el.textContent = text; el.style.color = isErr ? '#ff6b6b' : '#3ddc84'; el.style.opacity = '1';
+    clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, 5000);
+  }
+  window.yzyToast = yzyToast;
+
   // ── Serialize current state ──
   function buildSaveObject() {
     return {
@@ -7922,20 +8008,23 @@ document.getElementById("shop").addEventListener("click", (e) => {
       fashion: Array.from(boughtFashion),
       lastMilestone: lastMilestone,
       ts: Date.now(),
-      lastSeen: Date.now()
+      lastSeen: Date.now(),
+      tab: TAB_ID
     };
   }
+  window.buildSaveObject = buildSaveObject;
 
   // ── Cloud save helpers ──
   const CLOUD_SAVE_TABLE = "yzy_saves";
   let cloudSaveTs = 0;
 
-  async function pushCloudSave(obj) {
+  async function pushCloudSave(obj, keepalive) {
     try {
       const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
       await window.sbFetch(CLOUD_SAVE_TABLE + '?on_conflict=username', {
         method: 'POST',
         prefer: 'resolution=merge-duplicates,return=minimal',
+        keepalive: !!keepalive,
         body: JSON.stringify({
           username:  username,
           save_data: JSON.stringify(obj),
@@ -7973,20 +8062,21 @@ document.getElementById("shop").addEventListener("click", (e) => {
   }
 
   // ── Save to localStorage + cloud ──
-  function saveGame(silent) {
+  function saveGame(silent, keepalive) {
+    // A different tab saved newer progress for this profile: never clobber it.
+    if (staleTab) { if (!silent) resyncFromStorage(true); return; }
     try {
       const obj  = buildSaveObject();
-      const data = JSON.stringify(obj);
-      localStorage.setItem(getSaveKey(), data);
+      writeSave(getSaveKey(), obj);
       if (!silent) flashSaveStatus('SAVED ✓', false);
       updateSaveStatus();
       // Auto-submit to leaderboard on every save
       if (window.lbAutoSubmit) window.lbAutoSubmit();
       // Push to cloud (throttled — max once per 15s to avoid hammering Supabase)
       const now = Date.now();
-      if (now - cloudSaveTs > 15000) {
+      if (now - cloudSaveTs > 15000 || (keepalive && now - cloudSaveTs > 2000)) {
         cloudSaveTs = now;
-        pushCloudSave(obj);
+        pushCloudSave(obj, keepalive);
       }
     } catch(e) {
       if (!silent) flashSaveStatus('SAVE FAILED', true);
@@ -8042,7 +8132,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function applyLoad(obj) { return applyGame(obj); }
 
   function applyGame(obj) {
-    if (!obj || obj.v !== 2) return false;
+    obj = normalizeSave(obj);
+    if (!obj) return false;
     try {
       bars        = Number(obj.bars)        || 0;
       totalBars   = Number(obj.totalBars)   || 0;
@@ -8057,6 +8148,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
       boughtFashion  = new Set(Array.isArray(obj.fashion)  ? obj.fashion  : []);
       owned = sanitizeOwnedMap(obj.owned, totalBars);
+      // If the anti-cheat check dropped generators, keep the original so it can be restored.
+      try {
+        const rawN = obj.owned ? Object.values(obj.owned).reduce((a, n) => a + (Number(n) || 0), 0) : 0;
+        const keptN = Object.values(owned).reduce((a, n) => a + n, 0);
+        if (rawN > 0 && keptN === 0) backupRaw(slugOf(obj.username || (window.getUsername && window.getUsername())), JSON.stringify(obj), 'sanitized');
+      } catch(e) {}
       if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
       const idx = Math.floor(Number(obj.albumIdx) || 0);
       // Unlocks come from totalBars; sync the counter so the first tick doesn't
@@ -8111,70 +8208,108 @@ document.getElementById("shop").addEventListener("click", (e) => {
   }
 
   // ── Import: decode from base64 string ──
+  function decodeSaveCode(text) {
+    const t = String(text || '').trim();
+    if (!t) return { err: 'Paste a save code first.' };
+    let json = null;
+    if (t[0] === '{') json = t;
+    else {
+      const b64 = t.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      try { json = decodeURIComponent(atob(b64)); }
+      catch(e) { return { err: 'That code is incomplete or damaged — copy the whole code again and paste it.' }; }
+    }
+    let obj;
+    try { obj = JSON.parse(json); } catch(e) { return { err: 'That code is incomplete or damaged — copy the whole code again and paste it.' }; }
+    obj = normalizeSave(obj);
+    if (!obj) return { err: 'That is not a YZY Clicker save code.' };
+    return { obj: obj };
+  }
+  window._yzyDecodeSaveCode = decodeSaveCode;
+
   function importSave() {
     const input = document.getElementById('sm-import-input');
-    const msg   = document.getElementById('sm-import-msg');
-    const raw   = (input.value || '').trim();
-    if (!raw) { setImportMsg('Paste a save code first.', true); return; }
+    const d = decodeSaveCode(input.value);
+    if (d.err) { setImportMsg(d.err, true); return; }
+    const obj = d.obj;
+    const curName = window.getUsername ? window.getUsername() : (localStorage.getItem('yzy_username') || '');
+    const importedName = (typeof obj.username === 'string' && obj.username.trim().length >= 2)
+      ? obj.username.trim()
+      : 'imported_' + Date.now().toString().slice(-5);
+    const targetKey = SAVE_PREFIX + slugOf(importedName);
+    const curKey = getSaveKey();
+
+    // Compare with what will be replaced (the target profile, or the live game if it's us)
+    let existingBars = -1;
+    if (targetKey === curKey) existingBars = totalBars;
+    else { try { const e = normalizeSave(JSON.parse(localStorage.getItem(targetKey) || 'null')); if (e) existingBars = Number(e.totalBars) || 0; } catch(e) {} }
+    const newBars = Number(obj.totalBars) || 0;
+    if (existingBars > newBars) {
+      const ok = window.confirm('This save code has ¥' + formatNum(newBars) + ' lifetime bars, but your profile ' +
+        importedName.toUpperCase() + ' already has ¥' + formatNum(existingBars) + '.\n\nImport anyway? Your current save will be kept as a backup (Settings → Restore Backup).');
+      if (!ok) { setImportMsg('Import cancelled — nothing changed.', false); return; }
+    }
+
     try {
-      const json = decodeURIComponent(atob(raw));
-      const obj  = JSON.parse(json);
-      if (!obj || obj.v !== 2) throw new Error('invalid');
+      // 1. Save the live game under its own profile, then snapshot both profiles.
+      if (!staleTab) writeSave(curKey, buildSaveObject());
+      backupKey(curKey, 'before-import');
+      if (targetKey !== curKey) backupKey(targetKey, 'before-import');
 
-      // Snapshot CURRENT profile before applyGame mutates state
-      // (old order overwrote the previous username key with imported totals).
-      try {
-        const curData = JSON.stringify({
-          v:2, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
-          username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
-          owned: Object.assign({}, owned),
-          upgrades: Array.from(boughtUpgrades),
-          fashion: Array.from(boughtFashion),
-          lastMilestone: lastMilestone,
-          ts: Date.now()
-        });
-        localStorage.setItem(getSaveKey(), curData);
-      } catch(e) {}
+      if (!applyGame(obj)) { setImportMsg('Could not apply that save — nothing changed.', true); return; }
 
-      if (applyGame(obj)) {
+      localStorage.setItem('yzy_username', importedName);
+      localStorage.removeItem('yzy_twitter');
+      // ts/lastSeen = now: the import must beat older cloud copies on next load
+      // and must not trigger offline earnings for the time the code sat around.
+      const saveObj = buildSaveObject();
+      saveObj.username = importedName;
+      try { localStorage.setItem(targetKey, JSON.stringify(saveObj)); }
+      catch(e) { writeSave(targetKey, saveObj); }
+      try { localStorage.setItem(targetKey + '_offclaim', String(saveObj.lastSeen)); } catch(e) {}
+      staleTab = false;
+      cloudSaveTs = Date.now();
+      pushCloudSave(saveObj);
 
-        // ── Switch to imported profile ──
-        // Use embedded username if present, otherwise fall back to a generated name
-        let importedName = (obj.username && obj.username.trim().length >= 2)
-          ? obj.username.trim()
-          : 'imported_' + Date.now().toString().slice(-5);
-
-        // Make sure we don't overwrite an existing different profile silently —
-        // if this username already exists in localStorage and it's not the
-        // current user, treat it as switching to that profile
-        localStorage.setItem('yzy_username', importedName);
-        localStorage.removeItem('yzy_twitter');
-
-        // Save the imported data under the correct profile key
-        const importSaveObj = Object.assign({}, obj, {
-          username: importedName,
-          ts: obj.ts || Date.now()
-        });
-        localStorage.setItem(getSaveKey(), JSON.stringify(importSaveObj));
-
-        // Update header name display
-        const nd = document.getElementById('hp-name-display');
-        if (nd) nd.textContent = importedName.toUpperCase();
-
-        switchToAlbum(albumIdx);
-        updateUI();
-        input.value = '';
-        setImportMsg('✓ Imported as ' + importedName.toUpperCase(), false);
-        updateSaveStatus();
-        renderProfileList();
-        setTimeout(() => setImportMsg('', false), 3000);
-      } else {
-        setImportMsg('Could not apply save data.', true);
-      }
+      const nd = document.getElementById('hp-name-display');
+      if (nd) nd.textContent = importedName.toUpperCase();
+      switchToAlbum(albumIdx);
+      updateUI();
+      input.value = '';
+      setImportMsg('✓ Imported ' + importedName.toUpperCase() + ' — ¥' + formatNum(totalBars) + ' lifetime', false);
+      yzyToast('Save imported: ' + importedName.toUpperCase() + ' (¥' + formatNum(totalBars) + ')');
+      updateSaveStatus();
+      renderProfileList();
+      setTimeout(() => setImportMsg('', false), 6000);
     } catch(e) {
-      setImportMsg('Invalid save code.', true);
+      setImportMsg('Import failed (' + (e && e.name === 'QuotaExceededError' ? 'browser storage full' : 'error') + ') — your save was not changed.', true);
     }
   }
+
+  // ── Multi-tab: resync instead of overwriting another tab's newer progress ──
+  window.addEventListener('storage', e => {
+    if (!e.key) return;
+    // Profile changed in another tab: our save key now points at a different
+    // profile, so never write our in-memory game there — resync first.
+    if (e.key === 'yzy_username') { staleTab = true; return; }
+    // Another tab saved this profile. Only a background tab yields (the tab
+    // the player is looking at keeps ownership and wins on its next save).
+    if (e.key === getSaveKey() && e.newValue && document.hidden) {
+      try { const o = JSON.parse(e.newValue); if (!o || o.tab !== TAB_ID) staleTab = true; } catch(_) { staleTab = true; }
+    }
+  });
+  function resyncFromStorage(force) {
+    if (!staleTab && !force) return;
+    staleTab = false;
+    try {
+      const o = JSON.parse(localStorage.getItem(getSaveKey()) || 'null');
+      if (o && applyGame(o)) { switchToAlbum(albumIdx); updateUI(); }
+      const nd = document.getElementById('hp-name-display');
+      if (nd && window.getUsername) nd.textContent = window.getUsername();
+    } catch(e) {}
+  }
+  window.addEventListener('focus', () => resyncFromStorage());
+  document.addEventListener('pointerdown', () => resyncFromStorage(), true);
+  document.addEventListener('keydown', () => resyncFromStorage(), true);
 
   // ── UI helpers ──
   function flashSaveStatus(text, isErr) {
@@ -8229,7 +8364,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     const profiles = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('yzy_save_v1_')) {
+      if (k && k.startsWith('yzy_save_v1_') && !/_(alive|offclaim)$/.test(k)) {
         const uSlug = k.replace('yzy_save_v1_', '');
         if (uSlug !== curUser) profiles.push({ key: k, slug: uSlug });
       }
@@ -8264,21 +8399,14 @@ document.getElementById("shop").addEventListener("click", (e) => {
         + (statsLine ? '<div style="font-size:10px;opacity:0.6;letter-spacing:0.5px;padding-left:20px">' + statsLine + '</div>' : '')
         + (tsStr ? '<div style="font-size:10px;opacity:0.35;letter-spacing:0.5px;padding-left:20px">' + tsStr + '</div>' : '');
       btn.addEventListener('click', () => {
-        // Save current game first
-        try {
-          const curData = JSON.stringify({
-            v:2, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
-            owned: Object.assign({}, owned),
-            upgrades: Array.from(boughtUpgrades),
-            fashion: Array.from(boughtFashion),
-            lastMilestone: lastMilestone,
-            ts: Date.now()
-          });
-          localStorage.setItem(getSaveKey(), curData);
-        } catch(e) {}
+        // Save current game first (skip if another tab owns newer data)
+        try { if (!staleTab) writeSave(getSaveKey(), buildSaveObject()); } catch(e) {}
+        staleTab = false;
 
-        // Restore display name from slug (best-effort)
-        const displayName = p.slug.replace(/_/g,' ');
+        // Use the real stored username (slug loses '.', '-', case) so the
+        // cloud save row matches; fall back to the slug for old saves.
+        let displayName = p.slug.replace(/_/g,' ');
+        try { const so = JSON.parse(localStorage.getItem(p.key) || 'null'); if (so && typeof so.username === 'string' && slugOf(so.username) === p.slug) displayName = so.username; } catch(e) {}
         localStorage.setItem('yzy_username', displayName);
         localStorage.removeItem('yzy_twitter');
 
@@ -8317,6 +8445,65 @@ document.getElementById("shop").addEventListener("click", (e) => {
   document.getElementById('sm-export-btn').addEventListener('click', () => exportSave());
   document.getElementById('sm-import-btn').addEventListener('click', () => importSave());
 
+  // ── Restore Backup ──
+  const REASONS = { 'auto':'auto', 'before-overwrite':'before overwrite', 'before-import':'before import', 'before-reset':'before reset',
+    'before-new-game':'before new game', 'before-restore':'before restore', 'unreadable':'unreadable save', 'sanitized':'gens removed by check', 'legacy-v1':'old v1 save' };
+  function renderBackups() {
+    const list = document.getElementById('sm-backups-list');
+    list.innerHTML = '';
+    const items = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(BAK_PREFIX)) readBaks(k.slice(BAK_PREFIX.length)).forEach(b => items.push(Object.assign({ slug: k.slice(BAK_PREFIX.length) }, b)));
+    }
+    items.sort((a, b) => b.t - a.t);
+    if (!items.length) { list.innerHTML = '<div style="font-size:11px;opacity:.6">No backups yet — they are made automatically as you play.</div>'; return; }
+    items.forEach(b => {
+      let o = null; try { o = normalizeSave(JSON.parse(b.data)); } catch(e) {}
+      const name = (o && o.username) ? String(o.username) : b.slug.replace(/_/g, ' ');
+      const d = new Date(b.t);
+      const btn = document.createElement('button');
+      btn.className = 'sm-btn';
+      btn.style.cssText = 'flex-direction:column;align-items:flex-start;gap:2px;padding:7px 12px;font-size:12px;';
+      const top = document.createElement('div'); top.textContent = name.toUpperCase() + (o ? '  ·  ¥' + formatNum(Number(o.totalBars) || 0) : '  ·  unreadable');
+      const sub = document.createElement('div'); sub.style.cssText = 'font-size:10px;opacity:.65;letter-spacing:.3px';
+      sub.textContent = d.toLocaleDateString([], { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) + '  ·  ' + (REASONS[b.reason] || b.reason);
+      btn.appendChild(top); btn.appendChild(sub);
+      if (!o) btn.disabled = true;
+      btn.addEventListener('click', () => restoreBackup(o, name));
+      list.appendChild(btn);
+    });
+  }
+  function restoreBackup(o, name) {
+    const msg = document.getElementById('sm-backup-msg');
+    if (!o) return;
+    if (!window.confirm('Restore ' + name.toUpperCase() + ' with ¥' + formatNum(Number(o.totalBars) || 0) + ' lifetime bars?\n\nYour current game is backed up first, so you can undo this.')) return;
+    try {
+      if (!staleTab) writeSave(getSaveKey(), buildSaveObject());
+      backupKey(getSaveKey(), 'before-restore');
+      const key = SAVE_PREFIX + slugOf(name);
+      if (key !== getSaveKey()) backupKey(key, 'before-restore');
+      const now = Date.now();
+      const obj = Object.assign({}, o, { v: 2, username: name, ts: now, lastSeen: now, tab: TAB_ID });
+      localStorage.setItem(key, JSON.stringify(obj));
+      localStorage.setItem(key + '_offclaim', String(now));
+      localStorage.setItem('yzy_username', name);
+      window._yzy_resetting = true;     // don't let unload handlers overwrite what we just wrote
+      msg.style.color = '#3ddc84'; msg.textContent = '✓ Restored — reloading…';
+      const go = () => location.reload();
+      const t = setTimeout(go, 2500);
+      pushCloudSave(obj).finally(() => { clearTimeout(t); go(); });
+    } catch(e) {
+      msg.style.color = '#e84040'; msg.textContent = 'Restore failed' + (e && e.name === 'QuotaExceededError' ? ' (browser storage full)' : '') + '.';
+    }
+  }
+  document.getElementById('sm-backup-btn').addEventListener('click', () => {
+    const list = document.getElementById('sm-backups-list');
+    const open = list.style.display === 'flex';
+    list.style.display = open ? 'none' : 'flex';
+    if (!open) renderBackups();
+  });
+
   // ── New Game ──
   const ngBtn     = document.getElementById('sm-newgame-btn');
   const ngConfirm = document.getElementById('sm-newgame-confirm');
@@ -8343,26 +8530,18 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (!available) { ngErr.textContent = 'That username is already taken.'; return; }
     ngConfirm.style.display = 'none';
 
-    // 1. Save current game under current user before switching
-    try {
-      const curData = JSON.stringify({
-        v:2, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
-        owned: Object.assign({}, owned),
-        upgrades: Array.from(boughtUpgrades),
-        fashion: Array.from(boughtFashion),
-        lastMilestone: lastMilestone,
-        ts: Date.now()
-      });
-      localStorage.setItem(getSaveKey(), curData);
-    } catch(e) {}
+    // 1. Save current game under current user before switching (+ snapshot)
+    try { if (!staleTab) writeSave(getSaveKey(), buildSaveObject()); } catch(e) {}
+    backupKey(getSaveKey(), 'before-new-game');
+    staleTab = false;
 
     // 2. Switch active username to new profile
     localStorage.setItem('yzy_username', val);
     localStorage.removeItem('yzy_twitter');
 
-    // Delete cloud save for this new username so startup doesn't pull
-    // in an old save that belonged to someone with the same name
-    try { if (window._cloudSaveDelete) window._cloudSaveDelete(val); } catch(e) {}
+    // (No cloud delete here: if the availability check failed open it could
+    // destroy someone else's save. A fresh local save with ts=now is written
+    // below so an older cloud row under this name can't win on next load.)
 
     // 3. Reset game state in memory
     bars = 0; totalBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
@@ -8380,8 +8559,10 @@ document.getElementById("shop").addEventListener("click", (e) => {
       if (raw) { const obj = JSON.parse(raw); if (obj && obj.v === 2) applyGame(obj); }
     } catch(e) {}
 
+    if (!localStorage.getItem(getSaveKey())) { lastMilestone = -1; try { writeSave(getSaveKey(), buildSaveObject()); } catch(e) {} }
     switchToAlbum(albumIdx);
     updateUI();
+    yzyToast('New game started as ' + val.toUpperCase() + ' — previous profile kept under Switch Profile');
 
     // 6. Update header name display
     const nd = document.getElementById('hp-name-display');
@@ -8412,7 +8593,14 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // 0. Grab username BEFORE wiping localStorage — deletes need it
     const usernameToDelete = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || '');
 
-    // 1. Wipe all local data immediately (synchronous)
+    // 1. Snapshot every profile (backups live under yzy_bak_ and survive the wipe)
+    try { if (!staleTab) writeSave(getSaveKey(), buildSaveObject()); } catch(e) {}
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(SAVE_PREFIX) && !/_(alive|offclaim)$/.test(k)) keys.push(k); }
+      keys.forEach(k => backupKey(k, 'before-reset'));
+    } catch(e) {}
+    // Wipe all local data immediately (synchronous)
     window._yzy_resetting = true;
     try {
       for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -8443,13 +8631,14 @@ document.getElementById("shop").addEventListener("click", (e) => {
   setInterval(() => { saveGame(true); }, 30000);
 
   // ── Save on tab close ──
-  window.addEventListener('beforeunload', () => { if (!window._yzy_resetting) saveGame(true); });
+  window.addEventListener('beforeunload', () => { if (!window._yzy_resetting) saveGame(true, true); });
 
   // ── Migrate legacy flat save to per-user key ──
   try {
     const legacyKey = 'yzy_save_v1';
     const legacy = localStorage.getItem(legacyKey);
     if (legacy && !localStorage.getItem(getSaveKey())) {
+      backupRaw(slugOf(window.getUsername && window.getUsername()), legacy, 'legacy-v1');
       localStorage.setItem(getSaveKey(), legacy);
       localStorage.removeItem(legacyKey);
     }
@@ -8461,10 +8650,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
     try {
       const raw = localStorage.getItem(getSaveKey());
       if (raw) localObj = JSON.parse(raw);
-    } catch(e) {}
+    } catch(e) { try { const r = localStorage.getItem(getSaveKey()); if (r) backupRaw(getSaveKey().slice(SAVE_PREFIX.length), r, 'unreadable'); } catch(_) {} }
 
     // Show local save immediately so the game isn't blank while cloud loads
     let startupObj = null;
+    if (localObj && !normalizeSave(localObj)) { try { backupRaw(getSaveKey().slice(SAVE_PREFIX.length), JSON.stringify(localObj), 'unreadable'); } catch(e) {} }
     if (localObj && applyGame(localObj)) {
       startupObj = localObj;
       setTimeout(() => { if (window._yzyBootIdx !== albumIdx) switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
@@ -8473,15 +8663,19 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // Then check cloud — only if newer than local (never prefer higher bars alone;
     // that re-infected devices from poisoned high-score cloud saves).
     const cloudObj = await pullCloudSave();
-    if (cloudObj && cloudObj.v === 2) {
+    if (cloudObj && normalizeSave(cloudObj)) {
       const localTs    = localObj ? (localObj.ts || 0) : 0;
       const cloudTs    = cloudObj.ts || 0;
       const useCloud   = !localObj || cloudTs > localTs;
-      if (useCloud) {
+      if (useCloud && !staleTab) {
         if (applyGame(cloudObj)) {
           startupObj = cloudObj;
-          // Also update localStorage so next load is instant
-          try { localStorage.setItem(getSaveKey(), JSON.stringify(cloudObj)); } catch(e) {}
+          const localBars = localObj ? (Number(localObj.totalBars) || 0) : 0;
+          // Also update localStorage so next load is instant (writeSave backs up
+          // a bigger local save first — e.g. clock skew between devices)
+          try { writeSave(getSaveKey(), cloudObj); } catch(e) {}
+          if (localObj && localBars > (Number(cloudObj.totalBars) || 0) + 1)
+            setTimeout(() => yzyToast('Loaded your newer cloud save (¥' + formatNum(cloudObj.totalBars) + '). This device had ¥' + formatNum(localBars) + ' — kept in Settings → Restore Backup.'), 600);
           setTimeout(() => { if (window._yzyBootIdx !== albumIdx) switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
         }
       }
@@ -8495,7 +8689,6 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // Award = gen-only bars/sec × elapsed (clamped 60s..8h) × 0.5. Never counts
   // as clicks, never pushes totalBars past the 50T season cap.
   const OFF_MIN_MS = 60 * 1000, OFF_MAX_MS = 8 * 3600 * 1000, OFF_EFF = 0.5, SEASON_CAP = 5e13;
-  const TAB_ID = Math.random().toString(36).slice(2);
   let offlineReady = false, hiddenAt = 0, hiddenTotal = 0;
   function aliveKey()   { return getSaveKey() + '_alive'; }
   function claimedKey() { return getSaveKey() + '_offclaim'; }
@@ -8548,6 +8741,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   setInterval(heartbeat, 5000);
   document.addEventListener('visibilitychange', () => {
     if (window._yzy_resetting) return;
+    if (!document.hidden && staleTab) { resyncFromStorage(); hiddenAt = 0; heartbeat(); return; }
     if (document.hidden) {
       hiddenAt = Date.now(); hiddenTotal = totalBars;
       saveGame(true);
@@ -8561,7 +8755,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       hiddenAt = 0;
     } else { hiddenAt = 0; heartbeat(); }
   });
-  window.addEventListener('pagehide', () => { if (!window._yzy_resetting) saveGame(true); });
+  window.addEventListener('pagehide', () => { if (!window._yzy_resetting) saveGame(true, true); });
 })();
 </script>
 </body>
