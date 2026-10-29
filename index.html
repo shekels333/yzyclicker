@@ -1418,7 +1418,14 @@
     .era-sq.active { animation: none !important; }
     #click-wrap:hover #click-btn { transform: none; }
   }
-  </style>
+  #offline-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);padding:16px}
+#offline-modal .om-card{background:#0b0b0b;border:2px solid var(--era-primary,#fff);box-shadow:0 0 24px var(--era-accent,#fff);border-radius:12px;padding:22px 26px;text-align:center;max-width:340px;width:100%;color:#fff;font-family:inherit}
+#offline-modal .om-title{letter-spacing:.15em;font-size:13px;color:var(--era-accent,#fff);margin-bottom:6px}
+#offline-modal .om-time{font-size:15px;opacity:.8}
+#offline-modal .om-amt{font-size:20px;margin:10px 0 16px}
+#offline-modal .om-amt b{color:var(--era-primary,#fff)}
+#offline-modal .om-btn{background:var(--era-primary,#fff);color:#000;border:0;border-radius:8px;padding:10px 28px;font-weight:700;letter-spacing:.1em;cursor:pointer;font-family:inherit;font-size:14px}
+</style>
 
 </head>
 <body>
@@ -7782,7 +7789,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
       upgrades: Array.from(boughtUpgrades),
       fashion: Array.from(boughtFashion),
       lastMilestone: lastMilestone,
-      ts: Date.now()
+      ts: Date.now(),
+      lastSeen: Date.now()
     };
   }
 
@@ -8320,7 +8328,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
     } catch(e) {}
 
     // Show local save immediately so the game isn't blank while cloud loads
+    let startupObj = null;
     if (localObj && applyGame(localObj)) {
+      startupObj = localObj;
       setTimeout(() => { switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
     }
 
@@ -8333,13 +8343,89 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const useCloud   = !localObj || cloudTs > localTs;
       if (useCloud) {
         if (applyGame(cloudObj)) {
+          startupObj = cloudObj;
           // Also update localStorage so next load is instant
           try { localStorage.setItem(getSaveKey(), JSON.stringify(cloudObj)); } catch(e) {}
           setTimeout(() => { switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
         }
       }
     }
+    // Offline earnings: once, from whichever save actually won (local OR cloud).
+    if (startupObj) setTimeout(() => awardOffline(startupObj.lastSeen, 0), 120);
+    offlineReady = true;
   })();
+
+  // ── OFFLINE EARNINGS ──
+  // Award = gen-only bars/sec × elapsed (clamped 60s..8h) × 0.5. Never counts
+  // as clicks, never pushes totalBars past the 50T season cap.
+  const OFF_MIN_MS = 60 * 1000, OFF_MAX_MS = 8 * 3600 * 1000, OFF_EFF = 0.5, SEASON_CAP = 5e13;
+  const TAB_ID = Math.random().toString(36).slice(2);
+  let offlineReady = false, hiddenAt = 0, hiddenTotal = 0;
+  function aliveKey()   { return getSaveKey() + '_alive'; }
+  function claimedKey() { return getSaveKey() + '_offclaim'; }
+  function heartbeat() {
+    if (document.hidden) return;
+    try { localStorage.setItem(aliveKey(), JSON.stringify({ id: TAB_ID, t: Date.now() })); } catch(e) {}
+  }
+  function otherTabActive() {
+    try {
+      const a = JSON.parse(localStorage.getItem(aliveKey()) || 'null');
+      return !!(a && a.id !== TAB_ID && Date.now() - a.t < 15000);
+    } catch(e) { return false; }
+  }
+  function awardOffline(lastSeen, alreadyEarned) {
+    lastSeen = Number(lastSeen);
+    if (!Number.isFinite(lastSeen) || lastSeen <= 0) { heartbeat(); return 0; } // old save: no award
+    if (otherTabActive()) return 0;                       // another tab is playing
+    try { if (localStorage.getItem(claimedKey()) === String(lastSeen)) return 0; } catch(e) {}
+    const now = Date.now();
+    const elapsed = now - lastSeen;
+    heartbeat();
+    if (elapsed < OFF_MIN_MS) return 0;                    // also catches clock rollback (negative)
+    try { localStorage.setItem(claimedKey(), String(lastSeen)); } catch(e) {}
+    const secs = Math.min(elapsed, OFF_MAX_MS) / 1000;
+    let award = getBps() * secs * OFF_EFF - (alreadyEarned || 0);
+    award = Math.min(award, SEASON_CAP - totalBars);
+    if (!Number.isFinite(award) || award < 1) { saveGame(true); return 0; }
+    award = Math.floor(award);
+    bars += award; totalBars += award;                     // totalClicks untouched
+    saveGame(true);                                        // writes lastSeen = now
+    updateUI();
+    showOfflineModal(Math.min(elapsed, OFF_MAX_MS), award, elapsed > OFF_MAX_MS);
+    return award;
+  }
+  window._yzyAwardOffline = awardOffline;
+  function showOfflineModal(ms, award, capped) {
+    const old = document.getElementById('offline-modal'); if (old) old.remove();
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    const wrap = document.createElement('div');
+    wrap.id = 'offline-modal';
+    wrap.innerHTML = '<div class="om-card"><div class="om-title">WHILE YOU WERE AWAY</div>' +
+      '<div class="om-time">' + (h ? h + 'h ' : '') + m + 'm' + (capped ? ' (8h max)' : '') + '</div>' +
+      '<div class="om-amt">you made <b>¥' + formatNum(award) + '</b></div>' +
+      '<button class="om-btn" type="button">COLLECT</button></div>';
+    const close = () => wrap.remove();
+    wrap.querySelector('.om-btn').addEventListener('click', close);
+    wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+    document.body.appendChild(wrap);
+  }
+  setInterval(heartbeat, 5000);
+  document.addEventListener('visibilitychange', () => {
+    if (window._yzy_resetting) return;
+    if (document.hidden) {
+      hiddenAt = Date.now(); hiddenTotal = totalBars;
+      saveGame(true);
+    } else if (offlineReady && hiddenAt && Date.now() - hiddenAt > OFF_MIN_MS) {
+      // Background tab may have ticked a little; subtract what it already earned.
+      const earned = Math.max(0, totalBars - hiddenTotal);
+      try {
+        const o = JSON.parse(localStorage.getItem(getSaveKey()) || 'null');
+        awardOffline(o && o.lastSeen, earned);
+      } catch(e) {}
+      hiddenAt = 0;
+    } else { hiddenAt = 0; heartbeat(); }
+  });
+  window.addEventListener('pagehide', () => { if (!window._yzy_resetting) saveGame(true); });
 })();
 </script>
 </body>
