@@ -1972,6 +1972,24 @@ function getBps() {
   return GENERATORS.reduce((s, g) => s + (owned[g.id] || 0) * g.baseRate * genMult, 0);
 }
 
+// Rebuild clickPower/genMult from owned upgrades + fashion so imported/edited
+// saves cannot claim fake multipliers (or drift after partial loads).
+function recomputeMultsFromPurchases() {
+  let cp = 1, gm = 1;
+  UPGRADES.forEach(upg => {
+    if (!boughtUpgrades.has(upg.id)) return;
+    if (upg.type === "click" || upg.type === "both") cp *= upg.mult;
+    if (upg.type === "gen"   || upg.type === "both") gm *= upg.mult;
+  });
+  FASHION.forEach(item => {
+    if (!boughtFashion.has(item.id)) return;
+    if (item.type === "gen") gm *= item.mult;
+  });
+  clickPower = cp;
+  genMult = gm;
+}
+window.recomputeMultsFromPurchases = recomputeMultsFromPurchases;
+
 function getGenCost(gen) {
   return Math.floor(gen.baseCost * Math.pow(1.15, owned[gen.id] || 0));
 }
@@ -7146,9 +7164,14 @@ document.getElementById("shop").addEventListener("click", (e) => {
     const currentEra = ALBUM_THEMES[albumIdx] ? ALBUM_THEMES[albumIdx].name : "Unknown";
     const twitterHandle = window.getTwitterHandle ? window.getTwitterHandle() : '';
 
-    // Sanity check — reject obviously invalid / cheated scores before submitting
+    // Sanity check — reject invalid / likely-cheated scores before submitting
+    if (!Number.isFinite(totalBars) || !Number.isFinite(totalClicks)) return;
     if (totalBars < 0 || totalClicks < 0) return;
     if (totalBars > 1e14 || totalClicks > 5e7) return;
+    // Endgame AFK can mint huge bars; still reject absurd bars-per-click with almost no clicking
+    // (typical honest endgame still has thousands of clicks from play).
+    if (totalClicks < 100 && totalBars > 1e9) return;
+    if (totalClicks > 0 && (totalBars / totalClicks) > 1e10) return;
 
     // ── Only submit if our score is higher than what's on the leaderboard ──
     // Prevents a device with an old/lower save from overwriting a higher
@@ -7160,12 +7183,10 @@ document.getElementById("shop").addEventListener("click", (e) => {
       );
       if (existing && existing.length > 0) {
         const remote = existing[0];
+        // Never pull remote totals into the local run — that poisoned saves when
+        // a higher (sometimes cheated) board score existed for the same name.
         if (Math.floor(totalBars) < remote.total_bars) {
-          // Remote score is higher — sync it into local state silently
-          totalBars   = remote.total_bars;
-          totalClicks = Math.max(totalClicks, remote.total_clicks);
-          updateCounters();
-          return; // don't overwrite the higher score
+          return; // keep the higher board score; leave local progress alone
         }
       }
     } catch(e) {
@@ -7523,6 +7544,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
       boughtFashion  = new Set(Array.isArray(obj.fashion)  ? obj.fashion  : []);
       if (obj.lastMilestone !== undefined) lastMilestone = Number(obj.lastMilestone);
+      if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
 
       // Switch to saved era
       const idx = Number(obj.albumIdx) || 0;
@@ -7564,6 +7586,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       }
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
       boughtFashion  = new Set(Array.isArray(obj.fashion)  ? obj.fashion  : []);
+      if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
       const idx = Number(obj.albumIdx) || 0;
       if (idx >= 0 && idx < ALBUM_THEMES.length) {
         albumIdx = idx;
