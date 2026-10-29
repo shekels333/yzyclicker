@@ -152,6 +152,9 @@
   #click-wrap:hover #click-btn { transform: scale(1.02); }
   #click-wrap:active #click-btn { transform: scale(0.95); transition-duration: 0.06s; }
   #click-btn.pulse { animation: bpulse 0.2s var(--ease-spring); }
+  #click-btn.era-bonus-glow {
+    box-shadow: 0 0 28px var(--bonus-glow, #fff), 0 0 64px color-mix(in srgb, var(--bonus-glow, #fff) 55%, transparent) !important;
+  }
   @keyframes bpulse { 0% { transform: scale(1); } 35% { transform: scale(0.9); filter: brightness(1.55); } 70% { transform: scale(1.035); filter: brightness(1.1); } 100% { transform: scale(1); filter: brightness(1); } }
   @keyframes bpulse-noglow { 0% { transform: scale(1); } 35% { transform: scale(0.9); } 70% { transform: scale(1.035); } 100% { transform: scale(1); } }
   #orbit1, #orbit2 { position: absolute; border-radius: 50%; border: 1px solid transparent; pointer-events: none; transition: border-color 1s, transform 0.4s var(--ease-out); }
@@ -3027,39 +3030,58 @@ document.getElementById("click-wrap").addEventListener("click", (e) => {
     setTimeout(() => el.remove(), 1600); // safety net (reduced-motion / tab hidden)
   }
 
-  // Donda era: spawn a dove from the bottom on each click
-  // Graduation era: camera flash at random screen position
+  // ── Era click-bonus counters ALWAYS run (lite only skips FX) ─────────────
+  // Dedicated counters / activate — never gate these behind liteMode.
+  if (T.id === "ye") {
+    yeClickCount++;
+    if (yeClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus();
+  } else if (T.id === "jik") {
+    jikClickCount++;
+    if (jikClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus();
+    else if (jikSpiralActive && !liteMode) pulseJIKSpiral();
+  } else if (T.id === "graduation") {
+    gradClickCount++;
+    if (gradClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus();
+  } else if (T.id === "donda") {
+    genericClickCount++;
+    dondaLastClick = Date.now();
+    dondaAt80 = genericClickCount >= ERA_BONUS_THRESHOLD;
+    if (dondaAt80) activateClickBonus();
+    else dondaFlameIntensity = Math.min(1, genericClickCount / ERA_BONUS_THRESHOLD);
+  } else if (T.id === "vultures") {
+    genericClickCount++;
+    if (genericClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus();
+  } else if (T.id === "mbdtf") {
+    tickMbdtfGlitch(); // increments + may activateClickBonus at invert
+  }
+
+  // Generic 80-click bonus for eras without dedicated tracking
+  const GENERIC_BONUS_ERAS = ["dropout","lateregistration","808s","wtt","yeezus","pablo","ksg","bully","trillionbear"];
+  if (GENERIC_BONUS_ERAS.includes(T.id)) {
+    genericClickCount++;
+    if (genericClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus();
+  }
+
   // ── Era-specific animations (skipped in lite mode) ──────────────────────
   if (!liteMode) {
     if (T.id === "dropout")         { updateDropoutBearGlow(); if (genericClickCount >= ERA_BONUS_THRESHOLD) { spawnPawPrints(); dropoutLastClick = Date.now(); } else { spawnSinglePawPrint(); } }
     if (T.id === "lateregistration") { if (genericClickCount >= ERA_BONUS_THRESHOLD) spawnMusicalNote(); else if (Math.random() < 0.20) spawnMusicalNote(); spawnSheetMusic(); }
     if (T.id === "808s")            { spawnTeardrops(); if (genericClickCount >= ERA_BONUS_THRESHOLD) spawnBrokenHeart(); else if (Math.random() < 0.20) spawnBrokenHeart(); }
-    if (T.id === "mbdtf")           { spawnGoldParticles(); if (mbdtfInverted) { spawnGlitchParticles(); activateClickBonus(); } tickMbdtfGlitch(); }
+    if (T.id === "mbdtf")           { spawnGoldParticles(); if (mbdtfInverted) spawnGlitchParticles(); }
     if (T.id === "wtt")             { spawnWttBurst(); if (genericClickCount >= ERA_BONUS_THRESHOLD) spawnStrobe(); }
     if (T.id === "yeezus")          spawnLaser();
     if (T.id === "pablo")           { spawnPabloWave(); if (genericClickCount >= ERA_BONUS_THRESHOLD) spawnPabloFullWave(); }
-    if (T.id === "ye")              { yeClickCount++; pulseAurora(); spawnPaintStrokes(); if (yeClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus(); }
+    if (T.id === "ye")              { pulseAurora(); spawnPaintStrokes(); }
     if (T.id === "ksg")             { ksgClickCount++; ksgGhostCounter++; ksgLastClick = Date.now(); spawnKSGOrbs(); updateKSGGhostGlow(); if (ksgGhostCounter % 6 === 0) spawnGhost(); }
-    if (T.id === "jik")             { spawnJIKRingPulse(); jikClickCount++; if (jikClickCount >= ERA_BONUS_THRESHOLD) { pulseJIKSpiral(); activateClickBonus(); } else if (jikSpiralActive) { pulseJIKSpiral(); } }
-    if (T.id === "donda")           { genericClickCount++; if (!dondaRingRAF) startDondaFlameRing(); dondaLastClick = Date.now(); dondaAt80 = genericClickCount >= ERA_BONUS_THRESHOLD; if (dondaAt80) { spawnDove(); pulseDondaBtn(); triggerHeavenLight(); activateClickBonus(); } if (!dondaAt80) { dondaFlameIntensity = Math.min(1, genericClickCount / ERA_BONUS_THRESHOLD); } }
-    if (T.id === "vultures")        { genericClickCount++; advanceSandstorm(); spawnVulturesParticles(); if (genericClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus(); }
+    if (T.id === "jik")             { spawnJIKRingPulse(); if (jikClickCount >= ERA_BONUS_THRESHOLD) pulseJIKSpiral(); else if (jikSpiralActive) pulseJIKSpiral(); }
+    if (T.id === "donda")           { if (!dondaRingRAF) startDondaFlameRing(); if (dondaAt80) { spawnDove(); pulseDondaBtn(); triggerHeavenLight(); } }
+    if (T.id === "vultures")        { advanceSandstorm(); spawnVulturesParticles(); }
     if (T.id === "bully")           { tickBullySky(); tickBullyEclipse(); }
-    if (T.id === "trillionbear")    { const tbIntensity = eraBonusActive ? 1.0 : Math.min(1, genericClickCount / ERA_BONUS_THRESHOLD); spawnNebulaSplash(tbIntensity); const _tbBtn = document.getElementById("click-btn"); clearTimeout(window._tbPulseTimer); _tbBtn.classList.remove("tb-blue-pulse"); void _tbBtn.offsetWidth; _tbBtn.classList.add("tb-blue-pulse"); window._tbPulseTimer = setTimeout(() => _tbBtn.classList.remove("tb-blue-pulse"), 220); } // animations only; multiplier handled by GENERIC_BONUS_ERAS below
-    if (T.id === "graduation")      { spawnCameraFlash(); spawnDiplomaSparks(); gradClickCount++; if (gradClickCount >= ERA_BONUS_THRESHOLD) { keepGradConfetti(); activateClickBonus(); } }
-  } else {
-    // Lite mode: still track click counts for bonus multipliers, skip visuals
-    if (T.id === "ye")         { yeClickCount++; if (yeClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus(); }
-    if (T.id === "jik")        { jikClickCount++;    if (jikClickCount >= ERA_BONUS_THRESHOLD) { pulseJIKSpiral(); activateClickBonus(); } else if (jikSpiralActive) { pulseJIKSpiral(); } }
-    if (T.id === "graduation") { gradClickCount++;   if (gradClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus(); }
-    if (T.id === "vultures")   { genericClickCount++; if (genericClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus(); }
-    if (T.id === "mbdtf")      { if (mbdtfInverted) activateClickBonus(); tickMbdtfGlitch(); }
-  }
-
-  // ── Generic 80-click bonus for eras without dedicated tracking ────────────
-  const GENERIC_BONUS_ERAS = ["dropout","lateregistration","808s","wtt","yeezus","pablo","ksg","bully","trillionbear"];
-  if (GENERIC_BONUS_ERAS.includes(T.id)) {
-    genericClickCount++;
-    if (genericClickCount >= ERA_BONUS_THRESHOLD) activateClickBonus();
+    if (T.id === "trillionbear")    { const tbIntensity = eraBonusActive ? 1.0 : Math.min(1, genericClickCount / ERA_BONUS_THRESHOLD); spawnNebulaSplash(tbIntensity); const _tbBtn = document.getElementById("click-btn"); clearTimeout(window._tbPulseTimer); _tbBtn.classList.remove("tb-blue-pulse"); void _tbBtn.offsetWidth; _tbBtn.classList.add("tb-blue-pulse"); window._tbPulseTimer = setTimeout(() => _tbBtn.classList.remove("tb-blue-pulse"), 220); }
+    if (T.id === "graduation")      { spawnCameraFlash(); spawnDiplomaSparks(); if (gradClickCount >= ERA_BONUS_THRESHOLD) keepGradConfetti(); }
+  } else if (T.id === "ksg") {
+    // Keep KSG progress counters even when FX are off (not used for bonus — generic path handles that)
+    ksgClickCount++; ksgGhostCounter++; ksgLastClick = Date.now();
   }
 
   // quote changes handled by timer
@@ -4166,24 +4188,15 @@ function activateClickBonus() {
   if (!eraBonusActive) {
     eraBonusActive = true;
     clickPower *= ERA_BONUS_MULT;
+    // Break float-merge so the next +N clearly shows the 1.2× bump
+    window._lastFloat = null;
     // Pulse button glow on activation
-    btn.style.transition = "box-shadow 0.1s";
     const tbGlow = T.id === "trillionbear";
     const yeGlow = T.id === "ye";
     const glowColor = tbGlow ? "#1d4ed8" : yeGlow ? "#4eff9a" : (T.accent || T.primary);
-    btn.style.boxShadow = tbGlow
-      ? `0 0 60px #1d4ed8, 0 0 120px #1d4ed888, 0 0 200px #1d4ed844`
-      : yeGlow
-      ? `0 0 60px #4eff9a, 0 0 120px #4eff9a88, 0 0 200px #4eff9a44`
-      : `0 0 60px ${glowColor}, 0 0 120px ${glowColor}88`;
+    btn.style.setProperty("--bonus-glow", glowColor);
+    btn.classList.add("era-bonus-glow");
     if (T.id === "trillionbear") startTBPrism();
-    if (T.id === "lateregistration" || T.id === "808s" || T.id === "ksg" || T.id === "vultures" || T.id === "graduation" || T.id === "trillionbear" || T.id === "wtt" || T.id === "ye") {
-      // Keep glow for the full bonus window
-    } else {
-      setTimeout(() => { btn.style.boxShadow = ""; btn.style.transition = ""; }, 600);
-    }
-  } else if (T.id === "lateregistration" || T.id === "808s" || T.id === "ksg" || T.id === "vultures" || T.id === "graduation" || T.id === "trillionbear" || T.id === "wtt" || T.id === "ye") {
-    // glow already set — don't re-apply on every click to avoid colour flicker
   }
   // Reset decay timer on every click
   clearTimeout(eraBonusTimer);
@@ -4198,9 +4211,9 @@ function deactivateClickBonus() {
   genericClickCount = 0;
   // Clear persistent late registration / 808s glow
   const T = ALBUM_THEMES[albumIdx];
-  if (T.id === "lateregistration" || T.id === "808s" || T.id === "ksg" || T.id === "vultures" || T.id === "graduation" || T.id === "trillionbear" || T.id === "wtt" || T.id === "ye") {
+  {
     const btn = document.getElementById("click-btn");
-    if (btn) { btn.style.transition = "box-shadow 0.6s"; btn.style.boxShadow = ""; setTimeout(() => { btn.style.transition = ""; }, 650); }
+    if (btn) btn.classList.remove("era-bonus-glow");
   }
   if (ALBUM_THEMES[albumIdx].id === "trillionbear") stopTBPrism();
   if (ALBUM_THEMES[albumIdx].id === "vultures") { sandTarget = 1.0; sandLastClick = 0; }
