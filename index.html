@@ -7994,8 +7994,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (list.length && list[0].data === raw) return true;
     list.unshift({ t: Date.now(), reason: reason, data: raw });
     const auto = list.filter(b => b.reason === 'auto').slice(0, 3);
-    const evt  = list.filter(b => b.reason !== 'auto').slice(0, 5);
-    list = evt.concat(auto).sort((a, b) => b.t - a.t);
+    const evt  = list.filter(b => b.reason !== 'auto' && b.reason !== 'legacy').slice(0, 5);
+    const leg  = list.filter(b => b.reason === 'legacy').slice(0, 2);   // pre-season archive is never rotated out
+    list = evt.concat(auto, leg).sort((a, b) => b.t - a.t);
     while (list.length) {
       try { localStorage.setItem(BAK_PREFIX + slug, JSON.stringify(list)); return true; }
       catch(e) { list.pop(); }
@@ -8015,6 +8016,31 @@ document.getElementById("shop").addEventListener("click", (e) => {
       return Object.assign({}, obj, { v: 2 });
     return null;
   }
+  // ── Season: saves without the current marker are legacy and start fresh ──
+  const SEASON = 2, SEASON_START = '2026-10-29';
+  window.YZY_SEASON = SEASON;
+  function isLegacySave(o) { return !o || o.season !== SEASON; }
+  function freshSeasonSave(o) {
+    const now = Date.now();
+    return { v: 2, season: SEASON, username: (o && o.username) || (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
+      bars: 0, totalBars: 0, totalClicks: 0, clickPower: 1, genMult: 1, albumIdx: 0, owned: {}, upgrades: [], fashion: [],
+      lastMilestone: -1, ts: now, lastSeen: now, tab: TAB_ID };
+  }
+  function seasonNotice() {
+    const k = 'yzy_season_notice_' + SEASON;
+    try { if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch(e) {}
+    setTimeout(() => { yzyToast('New season! Old progress was reset so everyone starts even. Your old save is in Settings → Restore Backup.'); const el = document.getElementById('yzy-save-toast'); if (el) { clearTimeout(el._t); el._t = setTimeout(() => { el.style.opacity = '0'; }, 10000); } }, 700);
+  }
+  // Archive a legacy save and write the fresh one in its place. Returns the fresh save.
+  function archiveLegacy(o) {
+    const fresh = freshSeasonSave(o);
+    const slug = slugOf(fresh.username);
+    try { if ((Number(o.totalBars) || 0) > 0) backupRaw(slug, JSON.stringify(o), 'legacy'); } catch(e) {}
+    try { localStorage.setItem(SAVE_PREFIX + slug, JSON.stringify(fresh)); localStorage.setItem(SAVE_PREFIX + slug + '_offclaim', String(fresh.lastSeen)); } catch(e) {}
+    if ((Number(o.totalBars) || 0) > 0) seasonNotice();
+    return fresh;
+  }
+  window._yzyIsLegacySave = isLegacySave;
   // Every local save write goes through here. If the write would replace a save
   // with more lifetime bars (or an unreadable one), snapshot the old one first.
   function writeSave(key, obj) {
@@ -8057,6 +8083,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function buildSaveObject() {
     return {
       v: 2,
+      season: SEASON,
       username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
       bars: bars,
       totalBars: totalBars,
@@ -8177,6 +8204,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function applyGame(obj) {
     obj = normalizeSave(obj);
     if (!obj) return false;
+    if (isLegacySave(obj)) { obj = archiveLegacy(obj); window._yzySeasonReset = obj; }
     try {
       bars        = Number(obj.bars)        || 0;
       totalBars   = Number(obj.totalBars)   || 0;
@@ -8277,6 +8305,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     const d = decodeSaveCode(input.value);
     if (d.err) { setImportMsg(d.err, true); return; }
     const obj = d.obj;
+    const legacyCode = isLegacySave(obj) && (Number(obj.totalBars) || 0) > 0;
     const codeSec = (window.yzyValidSecret && window.yzyValidSecret(obj.sec)) ? obj.sec : null;
     delete obj.sec;
     const curName = window.getUsername ? window.getUsername() : (localStorage.getItem('yzy_username') || '');
@@ -8290,7 +8319,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
     let existingBars = -1;
     if (targetKey === curKey) existingBars = totalBars;
     else { try { const e = normalizeSave(JSON.parse(localStorage.getItem(targetKey) || 'null')); if (e) existingBars = Number(e.totalBars) || 0; } catch(e) {} }
-    const newBars = Number(obj.totalBars) || 0;
+    const newBars = legacyCode ? 0 : (Number(obj.totalBars) || 0);
+    if (legacyCode && !window.confirm('This save code is from before the new season (¥' + formatNum(Number(obj.totalBars) || 0) + '). Old progress does not carry over: importing it gives you the name ' + importedName.toUpperCase() + ' with a fresh start, and the old save is kept as an archived backup.\n\nContinue?')) { setImportMsg('Import cancelled — nothing changed.', false); return; }
     if (existingBars > newBars) {
       const ok = window.confirm('This save code has ¥' + formatNum(newBars) + ' lifetime bars, but your profile ' +
         importedName.toUpperCase() + ' already has ¥' + formatNum(existingBars) + '.\n\nImport anyway? Your current save will be kept as a backup (Settings → Restore Backup).');
@@ -8536,7 +8566,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   // ── Restore Backup ──
   const REASONS = { 'auto':'auto', 'before-overwrite':'before overwrite', 'before-import':'before import', 'before-reset':'before reset',
-    'before-new-game':'before new game', 'before-restore':'before restore', 'unreadable':'unreadable save', 'sanitized':'gens removed by check', 'legacy-v1':'old v1 save' };
+    'before-new-game':'before new game', 'before-restore':'before restore', 'unreadable':'unreadable save', 'sanitized':'gens removed by check', 'legacy-v1':'old v1 save', 'legacy':'legacy (pre-season)' };
   function renderBackups() {
     const list = document.getElementById('sm-backups-list');
     list.innerHTML = '';
@@ -8559,6 +8589,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
       sub.textContent = fmtDay(b.t) + ' ' + d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) + '  ·  ' + (REASONS[b.reason] || b.reason);
       btn.appendChild(top); btn.appendChild(sub);
       if (!o) btn.disabled = true;
+      if (o && isLegacySave(o)) {
+        sub.textContent += '  ·  archived, view only';
+        btn.style.opacity = '.6';
+        btn.title = 'Pre-season save — kept for reference, cannot be restored';
+      }
       btn.addEventListener('click', () => restoreBackup(o, name));
       list.appendChild(rowWrap(btn, 'Delete this backup', () => {
         if (!window.confirm('Delete this backup of ' + name.toUpperCase() + ' from ' + fmtDay(b.t) + '? This can\'t be undone.')) return;
@@ -8579,7 +8614,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
   }
   function restoreBackup(o, name) {
     const msg = document.getElementById('sm-backup-msg');
-    if (!o) return;
+ if (!o) return;
+    if (isLegacySave(o)) {
+      msg.style.color = '#e8b040';
+      msg.textContent = 'That save is from before the new season (¥' + formatNum(Number(o.totalBars) || 0) + ', ' + (Number(o.totalClicks) || 0).toLocaleString() + ' clicks). It is archived for reference and cannot be restored — everyone starts even this season.';
+      return;
+    }
     if (!window.confirm('Restore ' + name.toUpperCase() + ' with ¥' + formatNum(Number(o.totalBars) || 0) + ' lifetime bars?\n\nYour current game is backed up first, so you can undo this.')) return;
     try {
       if (!staleTab) writeSave(getSaveKey(), buildSaveObject());
@@ -8759,14 +8799,22 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // Show local save immediately so the game isn't blank while cloud loads
     let startupObj = null;
     if (localObj && !normalizeSave(localObj)) { try { backupRaw(getSaveKey().slice(SAVE_PREFIX.length), JSON.stringify(localObj), 'unreadable'); } catch(e) {} }
+    window._yzySeasonReset = null;
     if (localObj && applyGame(localObj)) {
+      if (window._yzySeasonReset) localObj = window._yzySeasonReset;
       startupObj = localObj;
       setTimeout(() => { if (window._yzyBootIdx !== albumIdx) switchToAlbum(albumIdx); updateUI(); updateSaveStatus(); }, 50);
     }
 
     // Then check cloud — only if newer than local (never prefer higher bars alone;
     // that re-infected devices from poisoned high-score cloud saves).
-    const cloudObj = await pullCloudSave();
+    let cloudObj = await pullCloudSave();
+    // A pre-season cloud copy is archived, never loaded over this season's game.
+    if (cloudObj && normalizeSave(cloudObj) && isLegacySave(cloudObj)) {
+      try { if ((Number(cloudObj.totalBars) || 0) > 0) { backupRaw(getSaveKey().slice(SAVE_PREFIX.length), JSON.stringify(cloudObj), 'legacy'); seasonNotice(); } } catch(e) {}
+      cloudObj = null;
+      if (!localObj) { const f = archiveLegacy({ username: window.getUsername ? window.getUsername() : '' }); applyGame(f); startupObj = f; }
+    }
     if (cloudObj && normalizeSave(cloudObj)) {
       const localTs    = localObj ? (localObj.ts || 0) : 0;
       const cloudTs    = cloudObj.ts || 0;
