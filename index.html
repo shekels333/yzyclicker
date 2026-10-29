@@ -1435,6 +1435,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 #offline-modal .om-time{font-size:15px;opacity:.8}
 #offline-modal .om-amt{font-size:20px;margin:10px 0 16px}
 #offline-modal .om-amt b{color:var(--era-primary,#fff)}
+#offline-modal .om-note{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:11px;line-height:1.4;color:rgba(255,255,255,.5);margin:-8px 0 14px}
 #offline-modal .om-btn{background:var(--era-primary,#fff);color:#000;border:0;border-radius:8px;padding:10px 28px;font-weight:700;letter-spacing:.1em;cursor:pointer;font-family:inherit;font-size:14px}
 #lb-rank-note{display:none;margin:4px 0 6px;padding:6px 10px;border:1px solid var(--era-primary,#fff);border-radius:6px;color:var(--era-accent,#fff);font-size: 11px;letter-spacing:.04em;text-align:center font-family: var(--small-font, var(--mono-font));}
 #rank-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99998;background:#0b0b0b;border:1px solid var(--era-primary,#fff);color:var(--era-accent,#fff);padding:10px 16px;border-radius:8px;font-size:12px;max-width:calc(100vw - 32px);text-align:center;pointer-events:none}
@@ -2055,6 +2056,9 @@ const FASHION = [
 // ─── STATE ───────────────────────────────────────────────────────────────────
 
 let bars = 0, totalBars = 0, clickPower = 1, genMult = 1;
+// Bars earned while offline: spendable + count for the boards, but never for era unlocks.
+let offlineBars = 0;
+function eraBars() { return Math.max(0, totalBars - (offlineBars || 0)); }
 let lastUnlockCount = 1;
 let totalClicks = 0;
 let liteMode = /Mobi|Android|iPhone|iPad|iPod|Touch/i.test(navigator.userAgent) || window.innerWidth <= 640;
@@ -2509,7 +2513,7 @@ function renderEraDots() {
   // Update styles only — no listener re-attachment
   Array.from(container.children).forEach((sq, i) => {
     const a = ALBUM_THEMES[i];
-    const unlocked = totalBars >= a.threshold;
+    const unlocked = eraBars() >= a.threshold;
     const active = i === albumIdx;
     sq.className = "era-sq" + (active ? " active" : "") + (!unlocked ? " locked" : "");
     const col = a.dotColor || a.primary;
@@ -2548,11 +2552,11 @@ function updateMobileEraNav() {
   // Find nearest unlocked neighbours
   let prevIdx = -1;
   for (let i = albumIdx - 1; i >= 0; i--) {
-    if (totalBars >= ALBUM_THEMES[i].threshold) { prevIdx = i; break; }
+    if (eraBars() >= ALBUM_THEMES[i].threshold) { prevIdx = i; break; }
   }
   let nextIdx = -1;
   for (let i = albumIdx + 1; i < ALBUM_THEMES.length; i++) {
-    if (totalBars >= ALBUM_THEMES[i].threshold) { nextIdx = i; break; }
+    if (eraBars() >= ALBUM_THEMES[i].threshold) { nextIdx = i; break; }
   }
 
   prevBtn.disabled = prevIdx === -1;
@@ -7111,12 +7115,12 @@ function showEraUnlockBanner(unlockedTheme) {
   const nameEl  = document.getElementById("era-unlock-name");
   const nextEl  = document.getElementById("era-unlock-next");
 
-  const nextIdx = ALBUM_THEMES.findIndex((a, i) => i > 0 && totalBars < a.threshold);
+  const nextIdx = ALBUM_THEMES.findIndex((a, i) => i > 0 && eraBars() < a.threshold);
   const nextTheme = nextIdx !== -1 ? ALBUM_THEMES[nextIdx] : null;
 
   nameEl.textContent = unlockedTheme.name.toUpperCase();
   nextEl.textContent = nextTheme
-    ? `${formatNum(nextTheme.threshold - totalBars)} bars to ${nextTheme.name.toUpperCase()}`
+    ? `${formatNum(nextTheme.threshold - eraBars())} bars to ${nextTheme.name.toUpperCase()}`
     : "ALL ERAS UNLOCKED";
 
   const col = unlockedTheme.accent || unlockedTheme.primary;
@@ -7131,7 +7135,7 @@ function showEraUnlockBanner(unlockedTheme) {
 
 function updateProgression() {
   // Count currently unlocked eras
-  const unlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || totalBars >= a.threshold).length;
+  const unlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || eraBars() >= a.threshold).length;
   if (unlockCount <= lastUnlockCount) return;
 
   // New era(s) just unlocked
@@ -7214,7 +7218,7 @@ function updateCounters() {
   if (nf) nf.classList.toggle("active", hasSzn && currentTab !== "fashion");
 
   // Find the next era not yet unlocked
-  const nextLockedIdx = ALBUM_THEMES.findIndex((a, i) => i > 0 && totalBars < a.threshold);
+  const nextLockedIdx = ALBUM_THEMES.findIndex((a, i) => i > 0 && eraBars() < a.threshold);
   const allUnlocked = nextLockedIdx === -1;
   if (allUnlocked) {
     document.getElementById("progress-bar-wrap").style.display = "none";
@@ -7224,14 +7228,14 @@ function updateCounters() {
     document.getElementById("progress-bar-wrap").style.display = "block";
     const prevThreshold = nextLockedIdx > 0 ? ALBUM_THEMES[nextLockedIdx - 1].threshold : 0;
     const nextThreshold = ALBUM_THEMES[nextLockedIdx].threshold;
-    const pct = Math.min(100, ((totalBars - prevThreshold) / (nextThreshold - prevThreshold)) * 100);
+    const pct = Math.min(100, ((eraBars() - prevThreshold) / (nextThreshold - prevThreshold)) * 100);
     document.getElementById("progress-bar-fill").style.width = pct + "%";
     document.getElementById("footer-mid").style.color = T.primary;
-    document.getElementById("footer-mid").textContent = `UNLOCK: ${ALBUM_THEMES[nextLockedIdx].name.toUpperCase()} — ${formatNum(nextThreshold - totalBars)} BARS TO GO`;
+    document.getElementById("footer-mid").textContent = `UNLOCK: ${ALBUM_THEMES[nextLockedIdx].name.toUpperCase()} — ${formatNum(nextThreshold - eraBars())} BARS TO GO`;
   }
 
   // Only re-render era dots when a new era becomes unlocked
-  const unlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || totalBars >= a.threshold).length;
+  const unlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || eraBars() >= a.threshold).length;
   if (unlockCount !== lastUnlockCount) {
     lastUnlockCount = unlockCount;
     renderEraDots();
@@ -7255,7 +7259,7 @@ function readSavedAlbumIdx() {
     const o = JSON.parse(raw);
     if (!o || o.v !== 2) return 0;
     const i = Math.floor(Number(o.albumIdx) || 0);
-    const tb = Number(o.totalBars) || 0;
+    const tb = Math.max(0, (Number(o.totalBars) || 0) - (Number(o.offlineBars) || 0));
     const unlocked = ALBUM_THEMES.filter((a, k) => k === 0 || tb >= a.threshold).length;
     return (i >= 0 && i < unlocked) ? i : unlocked - 1;
   } catch(e) { return 0; }
@@ -7267,7 +7271,7 @@ applyTheme(initTheme, true);
 document.documentElement.classList.remove('yzy-booting');
 setRandomQuote(initTheme, true);
 // Seed unlock count so first real unlock triggers the transition
-lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || totalBars >= a.threshold).length;
+lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || eraBars() >= a.threshold).length;
 
 // Rotate quote every 12 seconds, respecting anti-repeat logic
 setInterval(() => {
@@ -7291,7 +7295,7 @@ document.getElementById("era-dots").addEventListener("click", (e) => {
   const sq = e.target.closest(".era-sq[data-era-idx]");
   if (!sq) return;
   const i = parseInt(sq.dataset.eraIdx);
-  const unlocked = totalBars >= ALBUM_THEMES[i].threshold;
+  const unlocked = eraBars() >= ALBUM_THEMES[i].threshold;
   if (!transitioning && i !== albumIdx && unlocked) switchToAlbum(i);
 });
 
@@ -7384,7 +7388,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (!available) { pmErr.textContent = 'That name is taken by another player — try a different one.'; return; }
 
     // Wipe all in-memory game state so nothing bleeds in from a previous session
-    bars = 0; totalBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+    bars = 0; totalBars = 0; offlineBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
     Object.keys(owned).forEach(k => { owned[k] = 0; });
     boughtUpgrades = new Set(); boughtFashion = new Set();
     albumIdx = 0; lastMilestone = -1;
@@ -8024,7 +8028,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function freshSeasonSave(o) {
     const now = Date.now();
     return { v: 2, season: SEASON, username: (o && o.username) || (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
-      bars: 0, totalBars: 0, totalClicks: 0, clickPower: 1, genMult: 1, albumIdx: 0, owned: {}, upgrades: [], fashion: [],
+      bars: 0, totalBars: 0, offlineBars: 0, totalClicks: 0, clickPower: 1, genMult: 1, albumIdx: 0, owned: {}, upgrades: [], fashion: [],
       lastMilestone: -1, ts: now, lastSeen: now, tab: TAB_ID };
   }
   function seasonNotice() {
@@ -8088,6 +8092,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
       bars: bars,
       totalBars: totalBars,
+      offlineBars: offlineBars,
       totalClicks: totalClicks,
       clickPower: clickPower,
       genMult: genMult,
@@ -8167,6 +8172,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
       if (!Number.isFinite(totalClicks) || totalClicks < 0) totalClicks = 0;
       if (totalBars > 5e13) totalBars = 5e13;
       if (bars > totalBars) bars = totalBars;
+      offlineBars = Number(obj.offlineBars) || 0;
+      if (!Number.isFinite(offlineBars) || offlineBars < 0) offlineBars = 0;
+      if (offlineBars > totalBars) offlineBars = totalBars;
       clickPower  = Number(obj.clickPower)  || 1;
       genMult     = Number(obj.genMult)     || 1;
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
@@ -8174,7 +8182,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       owned = sanitizeOwnedMap(obj.owned, totalBars);
       if (obj.lastMilestone !== undefined) lastMilestone = Number(obj.lastMilestone);
       if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
-      lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || totalBars >= a.threshold).length;
+      lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || eraBars() >= a.threshold).length;
 
       // Switch to saved era
       const idx = Number(obj.albumIdx) || 0;
@@ -8215,6 +8223,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
       if (!Number.isFinite(totalClicks) || totalClicks < 0) totalClicks = 0;
       if (totalBars > 5e13) totalBars = 5e13;
       if (bars > totalBars) bars = totalBars;
+      offlineBars = Number(obj.offlineBars) || 0;
+      if (!Number.isFinite(offlineBars) || offlineBars < 0) offlineBars = 0;
+      if (offlineBars > totalBars) offlineBars = totalBars;
       clickPower  = Number(obj.clickPower)  || 1;
       genMult     = Number(obj.genMult)     || 1;
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
@@ -8230,7 +8241,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const idx = Math.floor(Number(obj.albumIdx) || 0);
       // Unlocks come from totalBars; sync the counter so the first tick doesn't
       // "newly unlock" every era and auto-jump the viewed era forward.
-      lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || totalBars >= a.threshold).length;
+      lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || eraBars() >= a.threshold).length;
       if (idx >= 0 && idx < lastUnlockCount) albumIdx = idx;
       else albumIdx = lastUnlockCount - 1;
 
@@ -8531,7 +8542,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         localStorage.removeItem('yzy_twitter');
 
         // Reset state
-        bars = 0; totalBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+        bars = 0; totalBars = 0; offlineBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
         Object.keys(owned).forEach(k => { owned[k] = 0; });
         boughtUpgrades = new Set(); boughtFashion = new Set(); albumIdx = 0;
 
@@ -8688,12 +8699,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // below so an older cloud row under this name can't win on next load.)
 
     // 3. Reset game state in memory
-    bars = 0; totalBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+    bars = 0; totalBars = 0; offlineBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
     Object.keys(owned).forEach(k => { owned[k] = 0; });
     boughtUpgrades = new Set(); boughtFashion = new Set();
 
     // 4. Reset game state for fresh start (new user = no existing save)
-    bars = 0; totalBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+    bars = 0; totalBars = 0; offlineBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
     Object.keys(owned).forEach(k => { owned[k] = 0; });
     boughtUpgrades = new Set(); boughtFashion = new Set(); albumIdx = 0;
 
@@ -8870,7 +8881,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     award = Math.min(award, SEASON_CAP - totalBars);
     if (!Number.isFinite(award) || award < 1) { saveGame(true); return 0; }
     award = Math.floor(award);
-    bars += award; totalBars += award;                     // totalClicks untouched
+    bars += award; totalBars += award; offlineBars += award;                     // totalClicks untouched
     saveGame(true);                                        // writes lastSeen = now
     updateUI();
     showOfflineModal(Math.min(elapsed, OFF_MAX_MS), award, elapsed > OFF_MAX_MS);
@@ -8885,6 +8896,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     wrap.innerHTML = '<div class="om-card"><div class="om-title">WHILE YOU WERE AWAY</div>' +
       '<div class="om-time">' + (h ? h + 'h ' : '') + m + 'm' + (capped ? ' (8h max)' : '') + '</div>' +
       '<div class="om-amt">you made <b>¥' + formatNum(award) + '</b></div>' +
+      '<div class="om-note">Offline bars don\'t count toward the next era.</div>' +
       '<button class="om-btn" type="button">COLLECT</button></div>';
     const close = () => wrap.remove();
     wrap.querySelector('.om-btn').addEventListener('click', close);
