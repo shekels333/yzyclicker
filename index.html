@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <script>try{if(Object.keys(localStorage).some(k=>k.indexOf('yzy_save_v1_')===0))document.documentElement.classList.add('yzy-booting');}catch(e){}setTimeout(function(){document.documentElement.classList.remove('yzy-booting')},3000);</script>
-<style>html.yzy-booting body{visibility:hidden}</style>
+<style>html.yzy-booting body{visibility:hidden}#lb-mode-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+#lb-mode-row .lb-mode-btn{background:transparent;border:1px solid transparent;border-radius:4px;padding:3px 10px;font-family:var(--mono-font,'Space Mono',monospace);font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer}
+#lb-week-reset{margin-left:auto;font-size:10px;letter-spacing:1px;text-transform:uppercase}
+</style>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>YzY CLICKER</title>
@@ -7468,6 +7471,38 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   // ── State ──
   let lbData      = [];
+  let lbMode      = "all";    // "all" | "week"
+  let weeklyNeed  = 0;        // clicks needed to show on weekly board (from server)
+  // Ms until next Monday 00:00 America/Los_Angeles (matches server yzy_week_start()).
+  function msToWeeklyReset() {
+    const now = new Date();
+    const parts = {};
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' })
+      .formatToParts(now).forEach(p => parts[p.type] = p.value);
+    const dow = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(parts.weekday);
+    const elapsed = ((dow * 24 + Number(parts.hour)) * 60 + Number(parts.minute)) * 60 + Number(parts.second);
+    return Math.max(0, (7 * 86400 - elapsed) * 1000);
+  }
+  function weeklyResetText() {
+    const ms = msToWeeklyReset();
+    const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    return 'resets in ' + (d ? d + 'd ' + h + 'h' : h ? h + 'h ' + m + 'm' : m + 'm');
+  }
+  window.weeklyResetText = weeklyResetText;
+  async function submitWeekly() {
+    try {
+      const res = await sbFetch('rpc/yzy_weekly_submit', {
+        method: 'POST', prefer: 'return=representation',
+        body: JSON.stringify({ p_username: getUsername(), p_total_bars: Math.floor(totalBars), p_total_clicks: Math.floor(totalClicks),
+          p_era: ALBUM_THEMES[albumIdx] ? ALBUM_THEMES[albumIdx].name : null,
+          p_twitter: (window.getTwitterHandle ? window.getTwitterHandle() : '') || null })
+      });
+      if (res && res.ok && typeof res.need_clicks === 'number') weeklyNeed = res.need_clicks;
+      if (window.updateRankNote) updateRankNote();
+    } catch(e) { /* weekly is best-effort; never blocks all-time */ }
+  }
+  window._yzyWeeklyNeed = () => weeklyNeed;
+  window._yzyLbMode = () => lbMode;
   let lbSort      = "bars";   // "bars" | "clicks"
   let lbLoading   = false;
   let lbLastFetch = 0;
@@ -7524,6 +7559,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // Sanity check — reject invalid / likely-cheated scores before submitting
     if (!Number.isFinite(totalBars) || !Number.isFinite(totalClicks)) return;
     if (totalBars < 0 || totalClicks < 0) return;
+    // Weekly board: server sets the baseline and enforces its own rules.
+    if (totalBars <= 5e13 && totalClicks <= 5e7) submitWeekly();
     // Soft season cap below the old "just under 100T" forge magnet
     if (totalBars > 5e13 || totalClicks > 5e7) return;
     if (totalBars > 1e12 && totalClicks < 5000) { updateRankNote(); return; }
@@ -7585,13 +7622,20 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
     const sortCol = lbSort === "bars" ? "total_bars" : "total_clicks";
     try {
+      if (lbMode === "week") {
+        const w = await sbFetch(
+          "yzy_weekly_board?select=username,score,clicks,current_era,twitter_handle&order=" + (lbSort === "bars" ? "score" : "clicks") + ".desc&limit=50"
+        );
+        lbData = (w || []).map(r => ({ username: r.username, total_bars: Number(r.score), total_clicks: Number(r.clicks), era: r.current_era, twitter_handle: r.twitter_handle }));
+        throw "done";
+      }
       const rows = await sbFetch(
         TABLE + "?select=username,total_bars,total_clicks,era,twitter_handle&order=" + sortCol + ".desc&limit=50",
         { headers: { "Range-Unit": "items", "Range": "0-49" } }
       );
       lbData = rows || [];
     } catch(e) {
-      lbData = [];
+      if (e !== "done") lbData = [];
     }
     lbLoading = false;
     setRefreshSpin(false);
@@ -7612,6 +7656,24 @@ document.getElementById("shop").addEventListener("click", (e) => {
     }
 
     // Header row
+    const modeRow = document.createElement("div");
+    modeRow.id = "lb-mode-row";
+    modeRow.innerHTML = `
+      <button class="lb-mode-btn" data-mode="all" style="color:${T.primary};border-color:${lbMode==='all'?T.primary:'transparent'}">All-Time</button>
+      <button class="lb-mode-btn" data-mode="week" style="color:${T.primary};border-color:${lbMode==='week'?T.primary:'transparent'}">Weekly</button>
+      <span id="lb-week-reset" style="color:${T.muted};display:${lbMode==='week'?'inline':'none'}">${weeklyResetText()}</span>`;
+    wrap.appendChild(modeRow);
+    modeRow.querySelectorAll(".lb-mode-btn").forEach(btn => btn.addEventListener("click", () => {
+      if (btn.dataset.mode === lbMode) return;
+      lbMode = btn.dataset.mode;
+      modeRow.querySelectorAll(".lb-mode-btn").forEach(b => b.style.borderColor = b.dataset.mode === lbMode ? T.primary : "transparent");
+      document.getElementById("lb-week-reset").style.display = lbMode === "week" ? "inline" : "none";
+      lbData = CONFIGURED ? [] : lbData;
+      if (window.updateRankNote) updateRankNote();
+      renderLbList();
+      if (CONFIGURED) { lbLastFetch = 0; fetchLeaderboard(); }
+    }));
+
     const header = document.createElement("div");
     header.id = "lb-header";
     header.innerHTML = `
@@ -7760,6 +7822,16 @@ document.getElementById("shop").addEventListener("click", (e) => {
   window.rankClicksNeeded = rankClicksNeeded;
   let rankToastShown = false;
   function updateRankNote() {
+    const wr = document.getElementById('lb-week-reset');
+    if (wr) wr.textContent = weeklyResetText();
+    if (lbMode === 'week') {
+      const wn = weeklyNeed, wel = document.getElementById('lb-rank-note');
+      if (wel) {
+        wel.textContent = wn > 0 ? 'Your weekly score is paused — click ' + wn.toLocaleString() + ' more time' + (wn === 1 ? '' : 's') + ' this week to rank' : '';
+        wel.style.display = wn > 0 ? 'block' : 'none';
+      }
+      return;
+    }
     const n = rankClicksNeeded();
     const msg = n > 0 ? 'Your score is paused on the ¥ Board — click ' + n.toLocaleString() + ' more time' + (n === 1 ? '' : 's') + ' to rank' : '';
     const el = document.getElementById('lb-rank-note');
