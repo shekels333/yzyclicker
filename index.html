@@ -2309,6 +2309,7 @@ function getLiveBps() {
 // Effective bars/sec from all owned units of one generator (all multipliers applied).
 // getBps() is exactly the sum of these, so per-card totals always add up to the header rate.
 function genBps(g) { return (owned[g.id] || 0) * g.baseRate * genMult; }
+function formatRateEach(n) { return n < 1e3 ? String(+n.toPrecision(2)) : formatBps(n).replace(/\.0(?=[A-Z])/, ""); }
 function genTotalLabel(g) { const v = genBps(g); return v > 0 ? `Producing ${formatBps(v)} b/s` : "Producing 0 b/s"; }
 function getBps() {
   return GENERATORS.reduce((s, g) => s + genBps(g), 0);
@@ -2804,7 +2805,7 @@ function renderShop() {
       const descEl = document.createElement("div"); descEl.className = "gen-desc"; descEl.style.color = T.muted;
       descEl.textContent = isLocked ? "???" : gen.desc;
       const rateEl = document.createElement("div"); rateEl.className = "gen-rate"; rateEl.style.color = T.primary;
-      rateEl.textContent = isLocked ? `Unlocks at ${formatNum(unitCost)} bars` : `${+(gen.baseRate * genMult).toPrecision(2)} b/s each`;
+      rateEl.textContent = isLocked ? `Unlocks at ${formatNum(unitCost)} bars` : `${formatRateEach(gen.baseRate * genMult)} b/s each`;
       const infoEl = document.createElement("div"); infoEl.className = "gen-info";
       const totalEl = document.createElement("div"); totalEl.className = "gen-total" + (count ? "" : " zero") + (isLocked ? " hidden" : "");
       totalEl.style.color = T.primary;
@@ -2974,7 +2975,7 @@ function updateShopValues() {
       row.style.setProperty("--gen-border", canAfford ? T.primary : T.border);
       row.style.setProperty("--gen-glow",   canAfford ? `${T.primary}44` : "transparent");
 
-      const rateEl  = row.querySelector(".gen-rate");  if (rateEl && !isLocked) rateEl.textContent = `${+(gen.baseRate * genMult).toPrecision(2)} b/s each`;
+      const rateEl  = row.querySelector(".gen-rate");  if (rateEl && !isLocked) rateEl.textContent = `${formatRateEach(gen.baseRate * genMult)} b/s each`;
       const totalEl = row.querySelector(".gen-total"); if (totalEl) { const t = genTotalLabel(gen); if (totalEl.textContent !== t) totalEl.textContent = t; totalEl.classList.toggle("zero", !count); }
       const costEl  = row.querySelector(".gen-cost");  if (costEl)  { costEl.textContent = "¥" + formatNum(cost); costEl.style.color = canAfford ? T.accent : T.muted; }
       const countEl = row.querySelector(".gen-count"); if (countEl) { countEl.textContent = count; countEl.style.background = canAfford ? T.tabActiveBg : T.faint; countEl.style.color = canAfford ? T.tabActiveColor : T.muted; }
