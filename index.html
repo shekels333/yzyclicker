@@ -9226,31 +9226,73 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // ── background tune ────────────────────────────────────────────────────
   // A very simple looping lo-fi groove: soft chord pad + sine bass + light arp + brushed hat.
   // Key / tempo / feel follow the active era; everything is scheduled with a lookahead timer.
+  // Per-era "tune": key, tempo, pad waveform, chord progression, arp rhythm/contour,
+  // bass + hat patterns, and (for some eras) a short lead phrase that plays on alternate loops.
+  //   prog : 4 chords as [semitones from key, isMinorChord]
+  //   arp  : 8 steps (8th notes) per bar, 1 = play;  arpIdx : chord-tone index per step (0 root,1 third,2 fifth; +3 = next octave)
+  //   bass : 8th-note steps that get a bass hit;  pick : steps that get a fifth pickup (odd bars)
+  //   hats : 8th-note steps that get a hat;  lead : 32 scale degrees over 4 bars (-1 = rest, 7+ = next octave)
+  const MAJ = [0, 2, 4, 5, 7, 9, 11], MIN = [0, 2, 3, 5, 7, 8, 10];
   const ERA_MUSIC = {
-    dropout:          { root: 60, bpm: 84, minor: false, pad: 'triangle' },
-    lateregistration: { root: 62, bpm: 80, minor: false, pad: 'triangle' },
-    graduation:       { root: 64, bpm: 92, minor: false, pad: 'triangle' },
-    '808s':           { root: 57, bpm: 70, minor: true,  pad: 'sine'     },
-    mbdtf:            { root: 62, bpm: 78, minor: true,  pad: 'sawtooth' },
-    wtt:              { root: 60, bpm: 88, minor: true,  pad: 'sawtooth' },
-    yeezus:           { root: 58, bpm: 96, minor: true,  pad: 'square'   },
-    pablo:            { root: 65, bpm: 82, minor: false, pad: 'triangle' },
-    ye:               { root: 63, bpm: 74, minor: false, pad: 'sine'     },
-    ksg:              { root: 61, bpm: 76, minor: true,  pad: 'triangle' },
-    jik:              { root: 67, bpm: 86, minor: false, pad: 'triangle' },
-    donda:            { root: 59, bpm: 72, minor: true,  pad: 'sine'     },
-    vultures:         { root: 56, bpm: 78, minor: true,  pad: 'sawtooth' },
-    bully:            { root: 58, bpm: 80, minor: true,  pad: 'triangle' },
-    trillionbear:     { root: 66, bpm: 76, minor: false, pad: 'sine'     }
+    dropout:          { root: 60, bpm: 84, minor: false, pad: 'triangle',
+                        prog: [[0,false],[9,true],[5,false],[7,false]], arp: [1,0,1,1,0,1,1,0], arpIdx: [0,2,1,2,0,1,2,1],
+                        bass: [0,4], pick: [6], hats: [1,3,5,7],
+                        lead: [4,-1,5,4,-1,2,-1,-1, 0,-1,-1,-1,-1,-1,-1,-1, 4,-1,5,7,-1,5,4,-1, 2,-1,-1,-1,0,-1,-1,-1] },
+    lateregistration: { root: 62, bpm: 80, minor: false, pad: 'triangle',
+                        prog: [[0,false],[4,true],[5,false],[7,false]], arp: [1,0,0,1,0,0,1,0], arpIdx: [0,0,0,2,0,0,1,0],
+                        bass: [0,4], pick: [7], hats: [2,6],
+                        lead: [7,-1,-1,6,-1,4,-1,-1, 5,-1,4,-1,2,-1,-1,-1, 7,-1,-1,9,-1,7,-1,-1, 6,-1,4,-1,-1,-1,-1,-1] },
+    graduation:       { root: 64, bpm: 92, minor: false, pad: 'triangle',
+                        prog: [[0,false],[7,false],[9,true],[5,false]], arp: [1,1,0,1,1,0,1,0], arpIdx: [0,1,0,2,3,0,2,0],
+                        bass: [0,3,4], pick: [6], hats: [0,1,2,3,4,5,6,7],
+                        lead: [7,-1,7,-1,9,-1,7,-1, 4,-1,-1,-1,-1,-1,-1,-1, 7,-1,7,-1,11,-1,9,-1, 7,-1,-1,-1,-1,-1,-1,-1] },
+    '808s':           { root: 57, bpm: 70, minor: true,  pad: 'sine',
+                        prog: [[0,true],[8,false],[5,true],[10,false]], arp: [1,0,0,0,1,0,0,0], arpIdx: [0,0,0,0,2,0,0,0],
+                        bass: [0,4,7], pick: [], hats: [2,6],
+                        lead: [-1,-1,-1,-1,4,-1,2,-1, 0,-1,-1,-1,-1,-1,-1,-1, -1,-1,-1,-1,4,-1,5,-1, 4,-1,-1,-1,-1,-1,-1,-1] },
+    mbdtf:            { root: 62, bpm: 78, minor: true,  pad: 'sawtooth',
+                        prog: [[0,true],[8,false],[3,false],[10,false]], arp: [1,0,1,0,1,0,1,0], arpIdx: [5,4,3,2,1,0,1,2],
+                        bass: [0,4], pick: [6], hats: [1,3,5,7],
+                        lead: [7,-1,-1,-1,9,-1,7,-1, 5,-1,-1,-1,-1,-1,-1,-1, 7,-1,-1,-1,11,-1,9,-1, 7,-1,-1,-1,-1,-1,-1,-1] },
+    wtt:              { root: 60, bpm: 88, minor: true,  pad: 'sawtooth',
+                        prog: [[0,true],[10,false],[8,false],[7,false]], arp: [1,1,0,1,0,1,1,0], arpIdx: [0,3,0,2,0,3,2,0],
+                        bass: [0,2,4], pick: [6,7], hats: [1,3,5,6,7] },
+    yeezus:           { root: 58, bpm: 96, minor: true,  pad: 'square',
+                        prog: [[0,true],[0,true],[1,false],[0,true]], arp: [1,0,1,0,0,1,0,1], arpIdx: [0,0,0,0,0,0,0,0],
+                        bass: [0,2,4,6], pick: [], hats: [0,1,2,3,4,5,6,7] },
+    pablo:            { root: 65, bpm: 82, minor: false, pad: 'triangle',
+                        prog: [[0,false],[5,false],[0,false],[7,false]], arp: [0,1,0,1,0,1,0,1], arpIdx: [0,1,0,2,0,1,0,2],
+                        bass: [0,4], pick: [6], hats: [2,6],
+                        lead: [2,-1,4,-1,5,-1,4,-1, 2,-1,-1,-1,0,-1,-1,-1, 2,-1,4,-1,5,-1,7,-1, 5,-1,4,-1,-1,-1,-1,-1] },
+    ye:               { root: 63, bpm: 74, minor: false, pad: 'sine',
+                        prog: [[0,false],[2,true],[5,false],[0,false]], arp: [1,0,0,1,0,0,0,1], arpIdx: [3,0,0,2,0,0,0,1],
+                        bass: [0,4], pick: [], hats: [3,7] },
+    ksg:              { root: 61, bpm: 76, minor: true,  pad: 'triangle',
+                        prog: [[0,true],[8,false],[0,true],[7,true]], arp: [1,0,1,0,1,0,0,1], arpIdx: [2,0,0,0,1,0,0,2],
+                        bass: [0,4], pick: [5], hats: [1,5],
+                        lead: [-1,-1,2,-1,-1,-1,1,-1, 0,-1,-1,-1,-1,-1,-1,-1, -1,-1,2,-1,-1,-1,3,-1, 2,-1,-1,-1,-1,-1,-1,-1] },
+    jik:              { root: 67, bpm: 86, minor: false, pad: 'triangle',
+                        prog: [[0,false],[5,false],[9,true],[7,false]], arp: [1,1,0,1,1,0,1,1], arpIdx: [0,1,0,2,1,0,3,2],
+                        bass: [0,4], pick: [6], hats: [1,3,5,7],
+                        lead: [4,-1,4,-1,5,-1,7,-1, 7,-1,-1,-1,-1,-1,-1,-1, 9,-1,7,-1,5,-1,4,-1, 2,-1,-1,-1,-1,-1,-1,-1] },
+    donda:            { root: 59, bpm: 72, minor: true,  pad: 'sine',
+                        prog: [[0,true],[0,true],[8,false],[10,false]], arp: [1,0,0,0,0,0,1,0], arpIdx: [0,0,0,0,0,0,2,0],
+                        bass: [0], pick: [], hats: [4] },
+    vultures:         { root: 56, bpm: 78, minor: true,  pad: 'sawtooth',
+                        prog: [[0,true],[5,true],[8,false],[7,false]], arp: [1,0,1,1,0,1,0,1], arpIdx: [0,0,2,1,0,0,1,2],
+                        bass: [0,3,4], pick: [6], hats: [1,3,5,7] },
+    bully:            { root: 58, bpm: 80, minor: true,  pad: 'triangle',
+                        prog: [[0,true],[3,false],[10,false],[5,true]], arp: [1,0,1,0,1,1,0,1], arpIdx: [0,0,1,0,2,3,0,2],
+                        bass: [0,4], pick: [7], hats: [1,3,5,7],
+                        lead: [-1,-1,-1,-1,2,-1,3,-1, 2,-1,-1,-1,-1,-1,-1,-1, -1,-1,-1,-1,2,-1,0,-1, -1,-1,-1,-1,-1,-1,-1,-1] },
+    trillionbear:     { root: 66, bpm: 76, minor: false, pad: 'sine',
+                        prog: [[0,false],[5,false],[9,true],[2,true]], arp: [1,1,1,0,1,1,1,0], arpIdx: [0,1,2,0,3,4,5,0],
+                        bass: [0,4], pick: [], hats: [3,7],
+                        lead: [7,-1,9,-1,11,-1,-1,-1, 9,-1,-1,-1,-1,-1,-1,-1, 7,-1,9,-1,11,-1,14,-1, 11,-1,-1,-1,-1,-1,-1,-1] }
   };
-  const DEF_MUSIC = { root: 60, bpm: 80, minor: false, pad: 'triangle' };
-  // chord roots (semitones from key) + minor-third flags: major I–V–vi–IV, minor i–VI–III–VII
-  const PROG_MAJ = [[0, false], [7, false], [9, true], [5, false]];
-  const PROG_MIN = [[0, true], [8, false], [3, false], [10, false]];
-  const ARP = [1, 0, 1, 1, 0, 1, 1, 0];     // 8th-note pattern per bar
-  const ARP_IDX = [0, 2, 1, 2, 0, 1, 2, 1];
+  const DEF_MUSIC = ERA_MUSIC.dropout;
   let musicBus = null, musicLP = null, musicTimer = null, musicRunning = false, mStopTimer = null;
-  let mStep = 0, mNext = 0, mBar = 0;
+  let mStep = 0, mNext = 0;
   const mtof = function (m) { return 440 * Math.pow(2, (m - 69) / 12); };
   function ensureMusicBus() {
     if (musicBus) return;
@@ -9287,34 +9329,46 @@ document.getElementById("shop").addEventListener("click", (e) => {
     src.connect(f); f.connect(g); g.connect(musicBus);
     src.start(t); src.stop(t + 0.08);
   }
+  function scaleNote(cfg, deg) {              // scale degree → semitones from key root (7 = octave)
+    const sc = cfg.minor ? MIN : MAJ;
+    return Math.floor(deg / 7) * 12 + sc[((deg % 7) + 7) % 7];
+  }
   function scheduleStep(t, step, cfg) {
     const bar = Math.floor(step / 8), beat8 = step % 8;
-    const prog = cfg.minor ? PROG_MIN : PROG_MAJ;
-    const ch = prog[bar % 4];
+    const ch = cfg.prog[bar % 4];
     const root = cfg.root + ch[0];
     const third = root + (ch[1] ? 3 : 4), fifth = root + 7;
+    const tones = [root, third, fifth, root + 12, third + 12, fifth + 12];
     const stepDur = 60 / cfg.bpm / 2;
     const swing = (beat8 % 2) ? stepDur * 0.12 : 0;       // light swing on off-8ths
     const tt = t + swing;
+    const loud = cfg.pad === 'sawtooth' || cfg.pad === 'square';
     if (beat8 === 0) {                                     // chord pad, whole bar
       const barDur = stepDur * 8;
       [root, third, fifth].forEach(function (m, i) {
-        mNote({ f: mtof(m), t: t, dur: barDur * 0.98, gain: cfg.pad === 'sawtooth' || cfg.pad === 'square' ? 0.028 : 0.07, attack: 0.35, hold: barDur * 0.45, type: cfg.pad, detune: i === 1 ? 4 : i === 2 ? -4 : 0 });
+        mNote({ f: mtof(m), t: t, dur: barDur * 0.98, gain: loud ? 0.028 : 0.07, attack: 0.35, hold: barDur * 0.45, type: cfg.pad, detune: i === 1 ? 4 : i === 2 ? -4 : 0 });
       });
     }
-    if (beat8 === 0 || beat8 === 4) {                      // bass on 1 and 3
+    if (cfg.bass.indexOf(beat8) !== -1) {                  // bass pattern
       mNote({ f: mtof(root - 24), t: tt, dur: stepDur * 1.9, gain: 0.16, attack: 0.02, hold: stepDur * 0.9, type: 'sine', dest: musicBus });
     }
-    if (beat8 === 6 && (bar % 2 === 1)) {                  // little bass pickup every other bar
+    if ((bar % 2 === 1) && cfg.pick.indexOf(beat8) !== -1) {   // fifth pickup on odd bars
       mNote({ f: mtof(fifth - 24), t: tt, dur: stepDur * 0.9, gain: 0.11, attack: 0.02, type: 'sine', dest: musicBus });
     }
-    if (ARP[beat8]) {                                      // arp over chord tones, an octave up
-      const tones = [root, third, fifth];
-      const m = tones[ARP_IDX[beat8]] + 12 + ((bar % 4 === 3 && beat8 >= 4) ? 12 : 0);
+    if (cfg.arp[beat8]) {                                  // arp over chord tones, an octave up
+      const m = tones[cfg.arpIdx[beat8] % 6] + 12;
       mNote({ f: mtof(m), t: tt, dur: stepDur * 1.6, gain: 0.05, attack: 0.012, type: 'sine' });
       mNote({ f: mtof(m) * 2, t: tt, dur: stepDur * 0.9, gain: 0.012, attack: 0.012, type: 'sine' });
     }
-    if (beat8 % 2 === 1) mHat(tt, beat8 === 7 ? 0.03 : 0.018);   // brushed hats on the off-beats
+    if (cfg.lead && (bar % 8) >= 4) {                      // lead phrase on the second half of each 8-bar cycle
+      const deg = cfg.lead[step % 32];
+      if (deg >= 0) {
+        const m = cfg.root + 12 + scaleNote(cfg, deg);
+        mNote({ f: mtof(m), t: tt, dur: stepDur * 1.8, gain: 0.045, attack: 0.02, type: 'triangle' });
+        mNote({ f: mtof(m) * 2, t: tt, dur: stepDur * 0.8, gain: 0.008, attack: 0.02, type: 'sine' });
+      }
+    }
+    if (cfg.hats.indexOf(beat8) !== -1) mHat(tt, beat8 === 7 ? 0.03 : 0.018);   // hat pattern
   }
   function musicTick() {
     if (!musicRunning || !ctx) return;
