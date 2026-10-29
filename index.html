@@ -1415,6 +1415,39 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
     #upgrades-grid { grid-template-columns: 1fr; }
   }
 
+
+  /* ── Header title motion: letter rise on load, per-letter sheen sweep, soft
+     accent glow pulse, small pop on click / era unlock. transform + opacity +
+     background-position only; colours follow the era via --era-accent. ── */
+  #header-title { position: relative; --ht-sheen: rgba(255,255,255,0.85); --ht-glow: var(--era-accent, #fff); --ht-glow-max: 0.55; }
+  body.era-pablo #header-title { --ht-sheen: rgba(255,255,255,0.6); --ht-glow: rgba(255,255,255,0.9); --ht-glow-max: 0.35; }
+  body.era-graduation #header-title, body.era-donda #header-title { --ht-sheen: rgba(255,240,200,0.9); }
+  #main-wrap.mbdtf-dark-mode #header-title { --ht-glow: rgba(255,255,255,0.9); }
+  #header-title .ht-l { display: inline-block; position: relative; white-space: pre; will-change: transform;
+    animation: htRise 0.7s var(--ease-spring, cubic-bezier(.34,1.56,.64,1)) both; animation-delay: calc(var(--i) * 45ms); }
+  #header-title .ht-l::before, #header-title .ht-l::after { content: attr(data-ch); position: absolute; left: 0; top: 0; pointer-events: none; white-space: pre; }
+  #header-title .ht-l::before { color: transparent; text-shadow: 0 0 14px var(--ht-glow) !important; opacity: 0;
+    animation: htGlow 4.8s ease-in-out infinite; animation-delay: calc(1.2s + var(--i) * 70ms); }
+  #header-title .ht-l::after { color: transparent; text-shadow: none !important;
+    background-image: linear-gradient(105deg, transparent 0%, transparent 38%, var(--ht-sheen) 50%, transparent 62%, transparent 100%);
+    background-size: 300% 100%; background-position: 100% 0; background-repeat: no-repeat;
+    -webkit-background-clip: text; background-clip: text;
+    animation: htSheen 7s ease-in-out infinite; animation-delay: calc(1.4s + var(--i) * 55ms); }
+  #header-title.ht-replay .ht-l { animation-name: htRise2; }
+  #header-title.ht-pop  { animation: htPop 0.28s var(--ease-out, ease-out); }
+  #header-title.ht-pop-big { animation: htPopBig 0.6s var(--ease-spring, cubic-bezier(.34,1.56,.64,1)); }
+  @keyframes htRise  { 0% { opacity: 0; transform: translateY(0.45em); } 100% { opacity: 1; transform: none; } }
+  @keyframes htRise2 { 0% { transform: none; } 40% { transform: translateY(-0.22em); } 100% { transform: none; } }
+  @keyframes htGlow  { 0%, 100% { opacity: 0; } 50% { opacity: var(--ht-glow-max); } }
+  @keyframes htSheen { 0% { background-position: 100% 0; } 22%, 100% { background-position: 0% 0; } }
+  @keyframes htPop    { 0% { transform: scale(1); } 40% { transform: scale(1.045); } 100% { transform: scale(1); } }
+  @keyframes htPopBig { 0% { transform: scale(1); } 35% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  #header-title { transform-origin: left center; }
+  @media (prefers-reduced-motion: reduce) {
+    #header-title, #header-title .ht-l { animation: none !important; }
+    #header-title .ht-l::before, #header-title .ht-l::after { animation: none !important; opacity: 0 !important; }
+  }
+
   /* ── REDUCED MOTION ──────────────────────────────────────────────────
      Honors the OS "reduce motion" setting: decorative animation is
      collapsed to near-instant, opacity fades are kept short, and the
@@ -7122,7 +7155,35 @@ function fireMilestone(val) {
 // ─── PROGRESSION ─────────────────────────────────────────────────────────────
 
 
+
+// ─── HEADER TITLE MOTION (CSS-driven; JS only splits letters + toggles classes) ───
+(function initHeaderTitle() {
+  const el = document.getElementById("header-title");
+  if (!el || el.dataset.htInit) return;
+  el.dataset.htInit = "1";
+  const text = el.textContent;
+  el.setAttribute("aria-label", text);
+  el.textContent = "";
+  [...text].forEach((ch, i) => {
+    const s = document.createElement("span");
+    s.className = "ht-l"; s.dataset.ch = ch; s.style.setProperty("--i", i);
+    s.setAttribute("aria-hidden", "true");
+    s.textContent = ch;
+    el.appendChild(s);
+  });
+  const restart = cls => { el.classList.remove("ht-pop", "ht-pop-big"); void el.offsetWidth; el.classList.add(cls); };
+  el.addEventListener("animationend", e => { if (e.target === el) el.classList.remove("ht-pop", "ht-pop-big"); });
+  window._yzyTitlePop = () => { if (!el.classList.contains("ht-pop") && !el.classList.contains("ht-pop-big")) restart("ht-pop"); };
+  window._yzyTitleCelebrate = () => {
+    restart("ht-pop-big");
+    el.classList.remove("ht-replay"); void el.offsetWidth; el.classList.add("ht-replay");
+  };
+  const btn = document.getElementById("click-btn");
+  if (btn) btn.addEventListener("pointerdown", () => window._yzyTitlePop(), { passive: true });
+})();
+
 function showEraUnlockBanner(unlockedTheme) {
+  if (window._yzyTitleCelebrate) window._yzyTitleCelebrate();
   const T = ALBUM_THEMES[albumIdx];
   const banner  = document.getElementById("era-unlock-banner");
   const nameEl  = document.getElementById("era-unlock-name");
