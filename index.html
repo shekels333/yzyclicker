@@ -1359,16 +1359,17 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
   }
   #settings-close:hover { color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.08); transform: rotate(90deg); }
   /* ── Settings › Sound (SFX layer) ── */
-  #sm-sfx-vol-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; min-height: 20px; }
+  #sm-sfx-vol-row, #sm-music-vol-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; min-height: 20px; }
   .sfx-vol-label { font-size: 9px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.35); flex-shrink: 0; }
-  #sm-sfx-vol { flex: 1; min-width: 0; height: 4px; -webkit-appearance: none; appearance: none; background: rgba(255,255,255,0.15); border-radius: 2px; outline: none; cursor: pointer; margin: 0; }
-  #sm-sfx-vol::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: none; box-shadow: 0 0 0 3px rgba(255,255,255,0.12); cursor: pointer; }
-  #sm-sfx-vol::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: none; box-shadow: 0 0 0 3px rgba(255,255,255,0.12); cursor: pointer; }
-  #sm-sfx-vol::-moz-range-track { height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; }
-  #sm-sfx-vol:focus-visible { outline: 2px solid rgba(255,255,255,0.6); outline-offset: 4px; }
-  #sm-sfx-vol:disabled { opacity: 0.35; cursor: default; }
-  #sm-sfx-vol-val { font-size: 11px; color: rgba(255,255,255,0.55); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-  #sm-sfx-mute.sfx-muted { color: rgba(255,255,255,0.5); }
+  #sm-sfx-vol, #sm-music-vol { flex: 1; min-width: 0; height: 4px; -webkit-appearance: none; appearance: none; background: rgba(255,255,255,0.15); border-radius: 2px; outline: none; cursor: pointer; margin: 0; }
+  #sm-sfx-vol::-webkit-slider-thumb, #sm-music-vol::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: none; box-shadow: 0 0 0 3px rgba(255,255,255,0.12); cursor: pointer; }
+  #sm-sfx-vol::-moz-range-thumb, #sm-music-vol::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: none; box-shadow: 0 0 0 3px rgba(255,255,255,0.12); cursor: pointer; }
+  #sm-sfx-vol::-moz-range-track, #sm-music-vol::-moz-range-track { height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; }
+  #sm-sfx-vol:focus-visible, #sm-music-vol:focus-visible { outline: 2px solid rgba(255,255,255,0.6); outline-offset: 4px; }
+  #sm-sfx-vol:disabled, #sm-music-vol:disabled { opacity: 0.35; cursor: default; }
+  #sm-sfx-vol-val, #sm-music-vol-val { font-size: 11px; color: rgba(255,255,255,0.55); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  #sm-sfx-mute.sfx-muted, #sm-music-toggle.sfx-muted { color: rgba(255,255,255,0.5); }
+  #sm-music-toggle:disabled { opacity: 0.4; cursor: default; }
   /* ── LEADERBOARD TAB ── */
   #lb-wrap { padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 8px; height: 100%; box-sizing: border-box; overflow: hidden; }
   #lb-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
@@ -1632,6 +1633,12 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
             <span class="sfx-vol-label">Volume</span>
             <input type="range" id="sm-sfx-vol" min="0" max="100" step="1" value="35" aria-label="Sound volume">
             <span id="sm-sfx-vol-val">35%</span>
+          </div>
+          <button class="sm-btn" id="sm-music-toggle" type="button" style="margin-top:10px"><span class="sm-icon" id="sm-music-icon">🎵</span> <span id="sm-music-label">Music On</span></button>
+          <div id="sm-music-vol-row">
+            <span class="sfx-vol-label">Music</span>
+            <input type="range" id="sm-music-vol" min="0" max="100" step="1" value="50" aria-label="Music volume">
+            <span id="sm-music-vol-val">50%</span>
           </div>
         </div>
 
@@ -9079,7 +9086,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   let ctx = null, master = null, comp = null, grit = null, noiseBuf = null;
   let unlocked = false;
-  let state = { muted: false, vol: DEFAULT_VOL };
+  let state = { muted: false, vol: DEFAULT_VOL, music: true, mvol: 0.5 };
   const voices = [];               // { g, end }
   let lastClickAt = 0, clickTimes = [];
   let lastUnlockAt = -1e9;
@@ -9092,10 +9099,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
       if (o && typeof o === 'object') {
         if (typeof o.muted === 'boolean') state.muted = o.muted;
         if (typeof o.vol === 'number' && isFinite(o.vol)) state.vol = Math.min(1, Math.max(0, o.vol));
+        if (typeof o.music === 'boolean') state.music = o.music;
+        if (typeof o.mvol === 'number' && isFinite(o.mvol)) state.mvol = Math.min(1, Math.max(0, o.mvol));
       }
     }
   } catch (e) {}
-  function persist() { try { localStorage.setItem(KEY, JSON.stringify({ muted: state.muted, vol: state.vol })); } catch (e) {} }
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify({ muted: state.muted, vol: state.vol, music: state.music, mvol: state.mvol })); } catch (e) {} }
 
   // ── context ────────────────────────────────────────────────────────────
   function ensure() {
@@ -9125,7 +9134,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     } catch (e) { return null; }
     return ctx;
   }
-  function unlock() { if (!ensure()) return; unlocked = true; }
+  function unlock() { if (!ensure()) return; unlocked = true; if (state.music && !state.muted) startMusic(); }
   ['pointerdown', 'keydown', 'touchend'].forEach(function (ev) {
     window.addEventListener(ev, unlock, { once: true, capture: true, passive: true });
   });
@@ -9213,6 +9222,131 @@ document.getElementById("shop").addEventListener("click", (e) => {
   }
   function era() { try { return ((typeof ALBUM_THEMES !== 'undefined' && typeof albumIdx !== 'undefined' && ALBUM_THEMES[albumIdx]) || {}).id || ''; } catch (e) { return ''; } }
   function rnd(a, b) { return a + Math.random() * (b - a); }
+
+  // ── background tune ────────────────────────────────────────────────────
+  // A very simple looping lo-fi groove: soft chord pad + sine bass + light arp + brushed hat.
+  // Key / tempo / feel follow the active era; everything is scheduled with a lookahead timer.
+  const ERA_MUSIC = {
+    dropout:          { root: 60, bpm: 84, minor: false, pad: 'triangle' },
+    lateregistration: { root: 62, bpm: 80, minor: false, pad: 'triangle' },
+    graduation:       { root: 64, bpm: 92, minor: false, pad: 'triangle' },
+    '808s':           { root: 57, bpm: 70, minor: true,  pad: 'sine'     },
+    mbdtf:            { root: 62, bpm: 78, minor: true,  pad: 'sawtooth' },
+    wtt:              { root: 60, bpm: 88, minor: true,  pad: 'sawtooth' },
+    yeezus:           { root: 58, bpm: 96, minor: true,  pad: 'square'   },
+    pablo:            { root: 65, bpm: 82, minor: false, pad: 'triangle' },
+    ye:               { root: 63, bpm: 74, minor: false, pad: 'sine'     },
+    ksg:              { root: 61, bpm: 76, minor: true,  pad: 'triangle' },
+    jik:              { root: 67, bpm: 86, minor: false, pad: 'triangle' },
+    donda:            { root: 59, bpm: 72, minor: true,  pad: 'sine'     },
+    vultures:         { root: 56, bpm: 78, minor: true,  pad: 'sawtooth' },
+    bully:            { root: 58, bpm: 80, minor: true,  pad: 'triangle' },
+    trillionbear:     { root: 66, bpm: 76, minor: false, pad: 'sine'     }
+  };
+  const DEF_MUSIC = { root: 60, bpm: 80, minor: false, pad: 'triangle' };
+  // chord roots (semitones from key) + minor-third flags: major I–V–vi–IV, minor i–VI–III–VII
+  const PROG_MAJ = [[0, false], [7, false], [9, true], [5, false]];
+  const PROG_MIN = [[0, true], [8, false], [3, false], [10, false]];
+  const ARP = [1, 0, 1, 1, 0, 1, 1, 0];     // 8th-note pattern per bar
+  const ARP_IDX = [0, 2, 1, 2, 0, 1, 2, 1];
+  let musicBus = null, musicLP = null, musicTimer = null, musicRunning = false, mStopTimer = null;
+  let mStep = 0, mNext = 0, mBar = 0;
+  const mtof = function (m) { return 440 * Math.pow(2, (m - 69) / 12); };
+  function ensureMusicBus() {
+    if (musicBus) return;
+    musicLP = ctx.createBiquadFilter(); musicLP.type = 'lowpass'; musicLP.frequency.value = 1400; musicLP.Q.value = 0.6;
+    musicBus = ctx.createGain(); musicBus.gain.value = 0;
+    musicLP.connect(musicBus); musicBus.connect(master);
+  }
+  function musicTarget() { return (state.music && !state.muted) ? state.mvol * 0.75 : 0; }
+  function applyMusicGain(fade) {
+    if (!musicBus) return;
+    try {
+      const t = ctx.currentTime;
+      musicBus.gain.cancelScheduledValues(t);
+      musicBus.gain.setValueAtTime(musicBus.gain.value, t);
+      musicBus.gain.linearRampToValueAtTime(musicTarget(), t + (fade || 0.4));
+    } catch (e) {}
+  }
+  function mNote(o) {           // music voice: not counted against the SFX voice cap
+    const g = ctx.createGain(); g.connect(o.dest || musicLP);
+    const osc = ctx.createOscillator(); osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(o.f, o.t);
+    if (o.detune) osc.detune.value = o.detune;
+    g.gain.setValueAtTime(0.0001, o.t);
+    g.gain.linearRampToValueAtTime(o.gain, o.t + (o.attack || 0.01));
+    if (o.hold) g.gain.setValueAtTime(o.gain, o.t + (o.attack || 0.01) + o.hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, o.t + o.dur);
+    osc.connect(g); osc.start(o.t); osc.stop(o.t + o.dur + 0.03);
+  }
+  function mHat(t, gain) {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 7000; f.Q.value = 1.2;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    src.connect(f); f.connect(g); g.connect(musicBus);
+    src.start(t); src.stop(t + 0.08);
+  }
+  function scheduleStep(t, step, cfg) {
+    const bar = Math.floor(step / 8), beat8 = step % 8;
+    const prog = cfg.minor ? PROG_MIN : PROG_MAJ;
+    const ch = prog[bar % 4];
+    const root = cfg.root + ch[0];
+    const third = root + (ch[1] ? 3 : 4), fifth = root + 7;
+    const stepDur = 60 / cfg.bpm / 2;
+    const swing = (beat8 % 2) ? stepDur * 0.12 : 0;       // light swing on off-8ths
+    const tt = t + swing;
+    if (beat8 === 0) {                                     // chord pad, whole bar
+      const barDur = stepDur * 8;
+      [root, third, fifth].forEach(function (m, i) {
+        mNote({ f: mtof(m), t: t, dur: barDur * 0.98, gain: cfg.pad === 'sawtooth' || cfg.pad === 'square' ? 0.028 : 0.07, attack: 0.35, hold: barDur * 0.45, type: cfg.pad, detune: i === 1 ? 4 : i === 2 ? -4 : 0 });
+      });
+    }
+    if (beat8 === 0 || beat8 === 4) {                      // bass on 1 and 3
+      mNote({ f: mtof(root - 24), t: tt, dur: stepDur * 1.9, gain: 0.16, attack: 0.02, hold: stepDur * 0.9, type: 'sine', dest: musicBus });
+    }
+    if (beat8 === 6 && (bar % 2 === 1)) {                  // little bass pickup every other bar
+      mNote({ f: mtof(fifth - 24), t: tt, dur: stepDur * 0.9, gain: 0.11, attack: 0.02, type: 'sine', dest: musicBus });
+    }
+    if (ARP[beat8]) {                                      // arp over chord tones, an octave up
+      const tones = [root, third, fifth];
+      const m = tones[ARP_IDX[beat8]] + 12 + ((bar % 4 === 3 && beat8 >= 4) ? 12 : 0);
+      mNote({ f: mtof(m), t: tt, dur: stepDur * 1.6, gain: 0.05, attack: 0.012, type: 'sine' });
+      mNote({ f: mtof(m) * 2, t: tt, dur: stepDur * 0.9, gain: 0.012, attack: 0.012, type: 'sine' });
+    }
+    if (beat8 % 2 === 1) mHat(tt, beat8 === 7 ? 0.03 : 0.018);   // brushed hats on the off-beats
+  }
+  function musicTick() {
+    if (!musicRunning || !ctx) return;
+    try {
+      const cfg = ERA_MUSIC[era()] || DEF_MUSIC;
+      const stepDur = 60 / cfg.bpm / 2;
+      while (mNext < ctx.currentTime + 0.18) {
+        if (mNext < ctx.currentTime - 0.5) mNext = ctx.currentTime + 0.05;   // resync after a long suspend
+        scheduleStep(mNext, mStep, cfg);
+        mNext += stepDur; mStep++;
+      }
+    } catch (e) {}
+    musicTimer = setTimeout(musicTick, 60);
+  }
+  function startMusic() {
+    if (!ctx || musicRunning) { applyMusicGain(); return; }
+    ensureMusicBus();
+    clearTimeout(mStopTimer);
+    musicRunning = true;
+    mStep = 0; mNext = ctx.currentTime + 0.1;
+    applyMusicGain(1.2);
+    musicTick();
+  }
+  function stopMusic() {
+    if (!musicRunning) return;
+    applyMusicGain(0.5);
+    clearTimeout(musicTimer); musicTimer = null;
+    clearTimeout(mStopTimer);
+    mStopTimer = setTimeout(function () { musicRunning = false; }, 600);
+  }
+  function setMusic(b) { state.music = !!b; persist(); if (state.music && unlocked && !state.muted) { musicRunning = false; clearTimeout(musicTimer); startMusic(); } else stopMusic(); syncUI(); }
+  function setMusicVolume(v) { v = Math.min(1, Math.max(0, +v || 0)); state.mvol = v; applyMusicGain(0.1); persist(); syncUI(); }
 
   // ── sound bank ─────────────────────────────────────────────────────────
   const S = {
@@ -9321,7 +9455,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     } catch (e) {}
   }
   function setVolume(v) { v = Math.min(1, Math.max(0, +v || 0)); state.vol = v; applyMaster(); persist(); syncUI(); }
-  function setMuted(b) { state.muted = !!b; applyMaster(); persist(); syncUI(); }
+  function setMuted(b) { state.muted = !!b; applyMaster(); persist(); if (state.muted) stopMusic(); else if (state.music && unlocked) { musicRunning = false; clearTimeout(musicTimer); startMusic(); } syncUI(); }
 
   // ── settings UI ────────────────────────────────────────────────────────
   function syncUI() {
@@ -9335,6 +9469,16 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (btn) btn.classList.toggle('sfx-muted', state.muted);
     if (rng) { rng.value = Math.round(state.vol * 100); rng.disabled = state.muted; }
     if (val) val.textContent = Math.round(state.vol * 100) + '%';
+    const mb = document.getElementById('sm-music-toggle');
+    const ml = document.getElementById('sm-music-label');
+    const mi = document.getElementById('sm-music-icon');
+    const mr = document.getElementById('sm-music-vol');
+    const mv = document.getElementById('sm-music-vol-val');
+    if (ml) ml.textContent = state.music ? 'Music On' : 'Music Off';
+    if (mi) mi.textContent = state.music ? '🎵' : '🎵';
+    if (mb) { mb.classList.toggle('sfx-muted', !state.music || state.muted); mb.disabled = state.muted; }
+    if (mr) { mr.value = Math.round(state.mvol * 100); mr.disabled = state.muted || !state.music; }
+    if (mv) mv.textContent = Math.round(state.mvol * 100) + '%';
   }
   function wireUI() {
     const btn = document.getElementById('sm-sfx-mute');
@@ -9353,13 +9497,25 @@ document.getElementById("shop").addEventListener("click", (e) => {
       rng.addEventListener('input', function () { setVolume(rng.value / 100); });
       rng.addEventListener('change', function () { unlock(); play('tab'); });
     }
+    const mb = document.getElementById('sm-music-toggle');
+    const mr = document.getElementById('sm-music-vol');
+    if (mb && !mb._sfxWired) {
+      mb._sfxWired = true;
+      mb.addEventListener('click', function () { unlock(); setMusic(!state.music); play(state.music ? 'open' : 'close'); });
+    }
+    if (mr && !mr._sfxWired) {
+      mr._sfxWired = true;
+      mr.addEventListener('input', function () { setMusicVolume(mr.value / 100); });
+      mr.addEventListener('change', function () { unlock(); });
+    }
     syncUI();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireUI); else wireUI();
 
   window.yzySfx = {
     play: play, setVolume: setVolume, setMuted: setMuted, unlock: unlock,
-    isMuted: function () { return state.muted; }, getVolume: function () { return state.vol; }
+    isMuted: function () { return state.muted; }, getVolume: function () { return state.vol; },
+    setMusic: setMusic, setMusicVolume: setMusicVolume, isMusicOn: function () { return state.music; }
   };
 })();
 </script>
