@@ -2402,6 +2402,8 @@ function switchToAlbum(idx) {
   setTimeout(() => {
     try {
       albumIdx = idx;
+      // Persist the viewed era right away so closing the tab keeps it.
+      if (window.saveGame && !window._yzy_resetting) { try { window.saveGame(true); } catch(e) {} }
       const T = ALBUM_THEMES[idx];
       applyTheme(T, true);
       showBanner(T);
@@ -7216,8 +7218,11 @@ function readSavedAlbumIdx() {
     const raw = localStorage.getItem('yzy_save_v1_' + u.toLowerCase().replace(/[^a-z0-9]/g, '_'));
     if (!raw) return 0;
     const o = JSON.parse(raw);
-    const i = (o && o.v === 2) ? Number(o.albumIdx) || 0 : 0;
-    return (i >= 0 && i < ALBUM_THEMES.length) ? Math.floor(i) : 0;
+    if (!o || o.v !== 2) return 0;
+    const i = Math.floor(Number(o.albumIdx) || 0);
+    const tb = Number(o.totalBars) || 0;
+    const unlocked = ALBUM_THEMES.filter((a, k) => k === 0 || tb >= a.threshold).length;
+    return (i >= 0 && i < unlocked) ? i : unlocked - 1;
   } catch(e) { return 0; }
 }
 albumIdx = readSavedAlbumIdx();
@@ -7909,6 +7914,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     }
   }
 
+  window.saveGame = saveGame;
   // ── Load from object ──
   function applySave(obj) {
     if (!obj || obj.v !== 2) return false;
@@ -7928,6 +7934,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       owned = sanitizeOwnedMap(obj.owned, totalBars);
       if (obj.lastMilestone !== undefined) lastMilestone = Number(obj.lastMilestone);
       if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
+      lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || totalBars >= a.threshold).length;
 
       // Switch to saved era
       const idx = Number(obj.albumIdx) || 0;
@@ -7972,10 +7979,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
       boughtFashion  = new Set(Array.isArray(obj.fashion)  ? obj.fashion  : []);
       owned = sanitizeOwnedMap(obj.owned, totalBars);
       if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
-      const idx = Number(obj.albumIdx) || 0;
-      if (idx >= 0 && idx < ALBUM_THEMES.length) {
-        albumIdx = idx;
-      }
+      const idx = Math.floor(Number(obj.albumIdx) || 0);
+      // Unlocks come from totalBars; sync the counter so the first tick doesn't
+      // "newly unlock" every era and auto-jump the viewed era forward.
+      lastUnlockCount = ALBUM_THEMES.filter((a, i) => i === 0 || totalBars >= a.threshold).length;
+      if (idx >= 0 && idx < lastUnlockCount) albumIdx = idx;
+      else albumIdx = lastUnlockCount - 1;
 
       // Restore lastMilestone — if missing from old save, compute it from
       // totalBars so the notification doesn't re-fire on every refresh
