@@ -1169,10 +1169,10 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
     .upg-card:not(.locked):not(.cant-afford):not(.bought):hover { transform: none; }
     .lb-row:hover { transform: none; }
 
-    /* ── Footer: smaller, hide era progress text ── */
-    #footer-mid    { display: none !important; }
+    /* ── Footer: smaller; era progress text on its own compact row ── */
     #footer-text   { padding: 4px 10px; font-size: 1px; letter-spacing: 1.0px; font-family: var(--small-font, var(--mono-font));}
-    #progress-bar-wrap { height: 2px; }
+    #footer-mid    { grid-column: 1 / -1; grid-row: 1; font-size: 9px; letter-spacing: 1px; text-align: center; padding: 2px 70px 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #progress-bar-wrap { height: 5px; }
 
     /* ── Lite / dev toggles ── */
     #lite-toggle { opacity: 1 !important; bottom: 12px; right: 10px; font-size: 10px; font-family: var(--small-font, var(--mono-font));}
