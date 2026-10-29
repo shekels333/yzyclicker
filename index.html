@@ -1520,6 +1520,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
         <div class="sm-section">
           <div class="sm-label">Export Save</div>
           <button class="sm-btn" id="sm-export-btn"><span class="sm-icon">📋</span> Copy Save Code to Clipboard</button>
+          <div style="font-size:10px;opacity:.7;letter-spacing:.3px;margin-top:6px;line-height:1.4">🔑 The code includes the key that proves this name is yours. Treat it like a password: anyone with it can play and rank as you.</div>
         </div>
 
         <div class="sm-section">
@@ -7363,7 +7364,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (val.length < 2) { pmErr.textContent = 'At least 2 characters.'; return; }
     pmErr.textContent = 'Checking...';
     const available = window.checkUsernameAvailable ? await window.checkUsernameAvailable(val) : true;
-    if (!available) { pmErr.textContent = 'That username is already taken.'; return; }
+    if (!available) { pmErr.textContent = 'That name is taken by another player — try a different one.'; return; }
 
     // Wipe all in-memory game state so nothing bleeds in from a previous session
     bars = 0; totalBars = 0; totalClicks = 0; clickPower = 1; genMult = 1;
@@ -7384,6 +7385,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         if (window.saveGame) window.saveGame(true);
       }
     } catch(e) {}
+    if (window.yzyEnsureClaim) window.yzyEnsureClaim(val);
 
     switchToAlbum(0);
     updateUI();
@@ -7399,7 +7401,14 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (val.toUpperCase() !== currentName.toUpperCase()) {
       emErr.textContent = 'Checking...';
       const available = window.checkUsernameAvailable ? await window.checkUsernameAvailable(val) : true;
-      if (!available) { emErr.textContent = 'That username is already taken.'; return; }
+      if (!available) { emErr.textContent = 'That name is taken by another player — try a different one.'; return; }
+      // Move the name claim + cloud rows server-side (keeps this device's key)
+      if (window.yzyRenameName) {
+        const rr = await window.yzyRenameName(currentName, val);
+        if (rr === 'taken') { emErr.textContent = 'That name is taken by another player — try a different one.'; return; }
+      }
+      emErr.textContent = '';
+      window._yzyNameTaken = null;
     }
     // Migrate save file from old key to new key before changing username
     try {
@@ -7512,12 +7521,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
   window.weeklyResetText = weeklyResetText;
   async function submitWeekly() {
     try {
-      const res = await sbFetch('rpc/yzy_weekly_submit', {
-        method: 'POST', prefer: 'return=representation',
-        body: JSON.stringify({ p_username: getUsername(), p_total_bars: Math.floor(totalBars), p_total_clicks: Math.floor(totalClicks),
+      const res = await ownedRpc('yzy_weekly_submit_v2', getUsername(), { p_total_bars: Math.floor(totalBars), p_total_clicks: Math.floor(totalClicks),
           p_era: ALBUM_THEMES[albumIdx] ? ALBUM_THEMES[albumIdx].name : null,
-          p_twitter: (window.getTwitterHandle ? window.getTwitterHandle() : '') || null })
-      });
+          p_twitter: (window.getTwitterHandle ? window.getTwitterHandle() : '') || null });
       if (res && res.ok && typeof res.need_clicks === 'number') weeklyNeed = res.need_clicks;
       if (window.updateRankNote) updateRankNote();
     } catch(e) { /* weekly is best-effort; never blocks all-time */ }
@@ -7566,10 +7572,50 @@ document.getElementById("shop").addEventListener("click", (e) => {
   }
   window.sbFetch = sbFetch;
 
+  // ── Name ownership: a random per-profile key proves a name is yours ──
+  // Only its sha256 is stored server-side (yzy_names). It lives under
+  // yzy_owner_<slug> (survives Reset) and travels inside Export codes.
+  const OWNER_PREFIX = 'yzy_owner_';
+  function nameSlug(n) { return String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '_'); }
+  function validSecret(x) { return typeof x === 'string' && /^[0-9a-f]{64}$/.test(x); }
+  function getSecret(name, create) {
+    const k = OWNER_PREFIX + nameSlug(name);
+    let sec = null; try { sec = localStorage.getItem(k); } catch(e) {}
+    if (!validSecret(sec)) sec = null;
+    if (!sec && create !== false) {
+      const b = new Uint8Array(32); crypto.getRandomValues(b);
+      sec = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+      try { localStorage.setItem(k, sec); } catch(e) {}
+    }
+    return sec;
+  }
+  function setSecret(name, sec) { if (validSecret(sec)) try { localStorage.setItem(OWNER_PREFIX + nameSlug(name), sec); } catch(e) {} }
+  window.yzyGetSecret = getSecret; window.yzySetSecret = setSecret; window.yzyValidSecret = validSecret;
+  function hasProfile() { try { return !!localStorage.getItem('yzy_username'); } catch(e) { return false; } }
+  const takenWarned = {};
+  function noteTaken(name) {
+    const u = String(name).toUpperCase();
+    window._yzyNameTaken = u;
+    if (takenWarned[u]) return; takenWarned[u] = true;
+    setTimeout(() => window.yzyToast && window.yzyToast('The name ' + u + ' belongs to another player/device. Your progress is safe on this device, but it won\'t sync or rank — tap your name to pick a new one (or import your save code from the original device).', true), 300);
+  }
+  // Calls a secret-checked RPC for `name`. Returns the JSON result, or null on network error.
+  async function ownedRpc(fn, name, args, keepalive) {
+    if (!CONFIGURED || !hasProfile() || !name) return null;
+    const res = await sbFetch('rpc/' + fn, { method: 'POST', prefer: 'return=representation', keepalive: !!keepalive,
+      body: JSON.stringify(Object.assign({ p_username: String(name).toUpperCase(), p_secret: getSecret(name) }, args || {})) });
+    if (res && res.reason === 'taken') noteTaken(name);
+    else if (res && res.ok && window._yzyNameTaken === String(name).toUpperCase()) window._yzyNameTaken = null;
+    return res;
+  }
+  window.yzyOwnedRpc = ownedRpc;
+  window.yzyEnsureClaim = function(name) { return ownedRpc('yzy_claim_name', name || getUsername()).catch(() => null); };
+
   // ── Submit score (upsert by username) ──
   async function submitScore(silent) {
-    if (!CONFIGURED) return;
+    if (!CONFIGURED || !hasProfile()) return;
     const username   = getUsername();
+    if (window._yzyNameTaken === username) { if (!silent) setSubmitStatus("Name owned by another player"); return; }
     const now        = Date.now();
     if (now - lbSubmitTs < 15000) return;   // throttle: max once per 15s
     lbSubmitTs = now;
@@ -7607,21 +7653,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
       // If fetch fails, proceed with submission anyway
     }
 
-    const payload = {
-      username:       username,
-      total_bars:     Math.floor(totalBars),
-      total_clicks:   Math.floor(totalClicks),
-      era:            currentEra,
-      twitter_handle: twitterHandle || null,
-      submitted_at:   new Date().toISOString()
-    };
-
     try {
-      await sbFetch(TABLE + "?on_conflict=username", {
-        method:  "POST",
-        prefer:  "resolution=merge-duplicates,return=minimal",
-        body:    JSON.stringify(payload)
-      });
+      const r = await ownedRpc('yzy_lb_submit', username, {
+        p_total_bars: Math.floor(totalBars), p_total_clicks: Math.floor(totalClicks),
+        p_era: currentEra, p_twitter: twitterHandle || null });
+      if (!r || !r.ok) { if (!silent) setSubmitStatus(r && r.reason === 'taken' ? "Name owned by another player" : "Submit failed"); return; }
       setSubmitStatus("✓ Score submitted");
       setTimeout(() => setSubmitStatus(""), 3000);
     } catch (e) {
@@ -7883,7 +7919,9 @@ document.getElementById("shop").addEventListener("click", (e) => {
   window._lbDelete = function(usernameOverride) {
     if (!CONFIGURED) return Promise.resolve();
     const username = usernameOverride || getUsername();
-    return sbFetch(TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {});
+    // Server checks the name key; deletes this player's cloud save + all-time row.
+    return sbFetch('rpc/yzy_delete', { method: 'POST', prefer: 'return=representation',
+      body: JSON.stringify({ p_username: String(username).toUpperCase(), p_secret: getSecret(username, false) || '' }) }).catch(() => {});
   };
 
   // Also submit on milestone unlocks (score jumps)
@@ -7893,20 +7931,26 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // Checks both yzy_leaderboard (everyone who's played) and yzy_saves (cloud saves)
   window.checkUsernameAvailable = async function(username) {
     if (!CONFIGURED) return true;
-    const upper = username.toUpperCase();
     try {
-      const [lbRows, saveRows] = await Promise.all([
-        sbFetch('yzy_leaderboard?select=username&username=eq.' + encodeURIComponent(upper),
-          { headers: { "Prefer": "return=representation" } }),
-        sbFetch('yzy_saves?select=username&username=eq.' + encodeURIComponent(upper),
-          { headers: { "Prefer": "return=representation" } })
-      ]);
-      const takenInLb   = lbRows   && lbRows.length   > 0;
-      const takenInSave = saveRows && saveRows.length > 0;
-      return !takenInLb && !takenInSave; // true = available
+      // 'mine' = this device holds the key for it; 'free' = nobody has it.
+      // Case, spaces and punctuation are ignored ("Big.Player" == "bigplayer").
+      const r = await sbFetch('rpc/yzy_name_status', { method: 'POST', prefer: 'return=representation',
+        body: JSON.stringify({ p_username: username.toUpperCase(), p_secret: getSecret(username, false) }) });
+      return !r || r.status === 'mine' || r.status === 'free';
     } catch(e) {
-      return true; // if check fails, allow through
+      return true; // offline: allow; the server still refuses writes to a name owned by someone else
     }
+  };
+  // Rename on the server (moves claim, cloud save, all-time + weekly rows). Returns 'ok' | 'taken' | 'offline'.
+  window.yzyRenameName = async function(oldName, newName) {
+    const sec = getSecret(oldName);
+    try {
+      const r = await sbFetch('rpc/yzy_rename', { method: 'POST', prefer: 'return=representation',
+        body: JSON.stringify({ p_old: String(oldName || '').toUpperCase(), p_new: newName.toUpperCase(), p_secret: sec }) });
+      if (r && r.reason === 'taken') return 'taken';
+      setSecret(newName, sec);
+      return r && r.ok ? 'ok' : 'offline';
+    } catch(e) { setSecret(newName, sec); return 'offline'; }
   };
 
 })();
@@ -8021,16 +8065,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
   async function pushCloudSave(obj, keepalive) {
     try {
       const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
-      await window.sbFetch(CLOUD_SAVE_TABLE + '?on_conflict=username', {
-        method: 'POST',
-        prefer: 'resolution=merge-duplicates,return=minimal',
-        keepalive: !!keepalive,
-        body: JSON.stringify({
-          username:  username,
-          save_data: JSON.stringify(obj),
-          saved_at:  new Date().toISOString()
-        })
-      });
+      if (window._yzyNameTaken === username) return;
+      await window.yzyOwnedRpc('yzy_save_put', username, { p_save_data: JSON.stringify(obj) }, keepalive);
     } catch(e) { /* cloud save failed silently — local save still works */ }
   }
 
@@ -8038,26 +8074,16 @@ document.getElementById("shop").addEventListener("click", (e) => {
   window.pushCloudSave = pushCloudSave;
 
   // Exposed for reset/new game: delete cloud save — returns a promise so reset can await it
-  window._cloudSaveDelete = function(usernameOverride) {
-    const raw = usernameOverride
-      ? usernameOverride
-      : (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
-    const username = raw.toUpperCase();
-    return Promise.all([
-      window.sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {}),
-      window.sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(raw), { method: 'DELETE' }).catch(() => {})
-    ]);
-  };
+  // (cloud save is deleted together with the leaderboard row by _lbDelete → rpc/yzy_delete)
+  window._cloudSaveDelete = function() { return Promise.resolve(); };
 
   async function pullCloudSave() {
     try {
       const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
-      const rows = await window.sbFetch(
-        CLOUD_SAVE_TABLE + '?select=save_data,saved_at&username=eq.' + encodeURIComponent(username),
-        { headers: { "Prefer": "return=representation" } }
-      );
-      if (!rows || rows.length === 0) return null;
-      return JSON.parse(rows[0].save_data);
+      // Also claims an unclaimed name for this device (trust on first use).
+      const r = await window.yzyOwnedRpc('yzy_save_get', username);
+      if (!r || !r.ok || !r.save_data) return null;
+      return JSON.parse(r.save_data);
     } catch(e) { return null; }
   }
 
@@ -8184,7 +8210,10 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // ── Export: encode to base64 string ──
   function exportSave() {
     try {
-      const json = JSON.stringify(buildSaveObject());
+      const so = buildSaveObject();
+      const sec = window.yzyGetSecret ? window.yzyGetSecret(so.username) : null;
+      if (sec) so.sec = sec;   // ownership key: moving devices keeps the name
+      const json = JSON.stringify(so);
       const b64  = btoa(encodeURIComponent(json));
       navigator.clipboard.writeText(b64).then(() => {
         setExportBtn('✓ COPIED!', false);
@@ -8231,6 +8260,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
     const d = decodeSaveCode(input.value);
     if (d.err) { setImportMsg(d.err, true); return; }
     const obj = d.obj;
+    const codeSec = (window.yzyValidSecret && window.yzyValidSecret(obj.sec)) ? obj.sec : null;
+    delete obj.sec;
     const curName = window.getUsername ? window.getUsername() : (localStorage.getItem('yzy_username') || '');
     const importedName = (typeof obj.username === 'string' && obj.username.trim().length >= 2)
       ? obj.username.trim()
@@ -8268,7 +8299,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       try { localStorage.setItem(targetKey + '_offclaim', String(saveObj.lastSeen)); } catch(e) {}
       staleTab = false;
       cloudSaveTs = Date.now();
-      pushCloudSave(saveObj);
+      adoptImportedKey(importedName, codeSec).then(() => pushCloudSave(saveObj));
 
       const nd = document.getElementById('hp-name-display');
       if (nd) nd.textContent = importedName.toUpperCase();
@@ -8283,6 +8314,19 @@ document.getElementById("shop").addEventListener("click", (e) => {
     } catch(e) {
       setImportMsg('Import failed (' + (e && e.name === 'QuotaExceededError' ? 'browser storage full' : 'error') + ') — your save was not changed.', true);
     }
+  }
+
+  // Use the key from the code if it owns the name; otherwise keep this device's key.
+  async function adoptImportedKey(name, codeSec) {
+    if (!codeSec || !window.yzyGetSecret) return;
+    const local = window.yzyGetSecret(name, false);
+    if (local === codeSec) return;
+    window.yzySetSecret(name, codeSec);
+    if (!local) return;
+    try {
+      const r = await window.yzyOwnedRpc('yzy_claim_name', name);
+      if (r && r.reason === 'taken') { window.yzySetSecret(name, local); window._yzyNameTaken = null; await window.yzyOwnedRpc('yzy_claim_name', name); }
+    } catch(e) {}
   }
 
   // ── Multi-tab: resync instead of overwriting another tab's newer progress ──
@@ -8425,6 +8469,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         updateUI();
         const nd = document.getElementById('hp-name-display');
         if (nd) nd.textContent = displayName.toUpperCase();
+        if (window.yzyEnsureClaim) window.yzyEnsureClaim(displayName);
         settingsOverlay.classList.remove('open');
       });
       list.appendChild(btn);
@@ -8527,7 +8572,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (!val || val.length < 2) { ngErr.textContent = 'At least 2 characters.'; return; }
     ngErr.textContent = 'Checking...';
     const available = window.checkUsernameAvailable ? await window.checkUsernameAvailable(val) : true;
-    if (!available) { ngErr.textContent = 'That username is already taken.'; return; }
+    if (!available) { ngErr.textContent = 'That name is taken by another player — try a different one.'; return; }
     ngConfirm.style.display = 'none';
 
     // 1. Save current game under current user before switching (+ snapshot)
@@ -8563,6 +8608,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     switchToAlbum(albumIdx);
     updateUI();
     yzyToast('New game started as ' + val.toUpperCase() + ' — previous profile kept under Switch Profile');
+    if (window.yzyEnsureClaim) window.yzyEnsureClaim(val);
 
     // 6. Update header name display
     const nd = document.getElementById('hp-name-display');
