@@ -7117,7 +7117,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   }
   window.getUsername = getUsername;
 
-  // ── Supabase REST calls ──
+  // ── Supabase REST calls (exposed for cloud saves in initSaveSystem) ──
   async function sbFetch(path, opts = {}) {
     const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
       ...opts,
@@ -7133,6 +7133,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     const text = await res.text();
     return text ? JSON.parse(text) : null;
   }
+  window.sbFetch = sbFetch;
 
   // ── Submit score (upsert by username) ──
   async function submitScore(silent) {
@@ -7445,7 +7446,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   async function pushCloudSave(obj) {
     try {
       const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
-      await sbFetch(CLOUD_SAVE_TABLE + '?on_conflict=username', {
+      await window.sbFetch(CLOUD_SAVE_TABLE + '?on_conflict=username', {
         method: 'POST',
         prefer: 'resolution=merge-duplicates,return=minimal',
         body: JSON.stringify({
@@ -7467,15 +7468,15 @@ document.getElementById("shop").addEventListener("click", (e) => {
       : (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
     const username = raw.toUpperCase();
     return Promise.all([
-      sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {}),
-      sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(raw), { method: 'DELETE' }).catch(() => {})
+      window.sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(username), { method: 'DELETE' }).catch(() => {}),
+      window.sbFetch(CLOUD_SAVE_TABLE + '?username=eq.' + encodeURIComponent(raw), { method: 'DELETE' }).catch(() => {})
     ]);
   };
 
   async function pullCloudSave() {
     try {
       const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
-      const rows = await sbFetch(
+      const rows = await window.sbFetch(
         CLOUD_SAVE_TABLE + '?select=save_data,saved_at&username=eq.' + encodeURIComponent(username),
         { headers: { "Prefer": "return=representation" } }
       );
