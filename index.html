@@ -7487,7 +7487,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // ── Serialize current state ──
   function buildSaveObject() {
     return {
-      v: 1,
+      v: 2,
       username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
       bars: bars,
       totalBars: totalBars,
@@ -7572,7 +7572,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   // ── Load from object ──
   function applySave(obj) {
-    if (!obj || obj.v !== 1) return false;
+    if (!obj || obj.v !== 2) return false;
     try {
       bars        = Number(obj.bars)        || 0;
       totalBars   = Number(obj.totalBars)   || 0;
@@ -7617,7 +7617,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function applyLoad(obj) { return applyGame(obj); }
 
   function applyGame(obj) {
-    if (!obj || obj.v !== 1) return false;
+    if (!obj || obj.v !== 2) return false;
     try {
       bars        = Number(obj.bars)        || 0;
       totalBars   = Number(obj.totalBars)   || 0;
@@ -7692,13 +7692,13 @@ document.getElementById("shop").addEventListener("click", (e) => {
     try {
       const json = decodeURIComponent(atob(raw));
       const obj  = JSON.parse(json);
-      if (!obj || obj.v !== 1) throw new Error('invalid');
+      if (!obj || obj.v !== 2) throw new Error('invalid');
 
       // Snapshot CURRENT profile before applyGame mutates state
       // (old order overwrote the previous username key with imported totals).
       try {
         const curData = JSON.stringify({
-          v:1, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
+          v:2, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
           username: (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
           owned: Object.assign({}, owned),
           upgrades: Array.from(boughtUpgrades),
@@ -7840,7 +7840,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         // Save current game first
         try {
           const curData = JSON.stringify({
-            v:1, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
+            v:2, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
             owned: Object.assign({}, owned),
             upgrades: Array.from(boughtUpgrades),
             fashion: Array.from(boughtFashion),
@@ -7863,7 +7863,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         // Load that profile's save
         try {
           const raw = localStorage.getItem(p.key);
-          if (raw) { const obj = JSON.parse(raw); if (obj && obj.v === 1) applyGame(obj); }
+          if (raw) { const obj = JSON.parse(raw); if (obj && obj.v === 2) applyGame(obj); }
         } catch(e) {}
 
         switchToAlbum(albumIdx);
@@ -7919,7 +7919,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // 1. Save current game under current user before switching
     try {
       const curData = JSON.stringify({
-        v:1, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
+        v:2, bars, totalBars, totalClicks, clickPower, genMult, albumIdx,
         owned: Object.assign({}, owned),
         upgrades: Array.from(boughtUpgrades),
         fashion: Array.from(boughtFashion),
@@ -7950,7 +7950,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // 5. Load new user's save if they already have one
     try {
       const raw = localStorage.getItem(getSaveKey());
-      if (raw) { const obj = JSON.parse(raw); if (obj && obj.v === 1) applyGame(obj); }
+      if (raw) { const obj = JSON.parse(raw); if (obj && obj.v === 2) applyGame(obj); }
     } catch(e) {}
 
     switchToAlbum(albumIdx);
@@ -8044,7 +8044,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // Then check cloud — only if newer than local (never prefer higher bars alone;
     // that re-infected devices from poisoned high-score cloud saves).
     const cloudObj = await pullCloudSave();
-    if (cloudObj && cloudObj.v === 1) {
+    if (cloudObj && cloudObj.v === 2) {
       const localTs    = localObj ? (localObj.ts || 0) : 0;
       const cloudTs    = cloudObj.ts || 0;
       const useCloud   = !localObj || cloudTs > localTs;
