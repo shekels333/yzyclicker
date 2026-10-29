@@ -8891,12 +8891,13 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function showOfflineModal(ms, award, capped) {
     const old = document.getElementById('offline-modal'); if (old) old.remove();
     const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    const capH = Math.round(OFF_MAX_MS / 3600000);
     const wrap = document.createElement('div');
     wrap.id = 'offline-modal';
     wrap.innerHTML = '<div class="om-card"><div class="om-title">WHILE YOU WERE AWAY</div>' +
-      '<div class="om-time">' + (h ? h + 'h ' : '') + m + 'm' + (capped ? ' (8h max)' : '') + '</div>' +
+      '<div class="om-time">' + (h ? h + 'h ' : '') + m + 'm' + (capped ? ' (capped at ' + capH + 'h)' : '') + '</div>' +
       '<div class="om-amt">you made <b>¥' + formatNum(award) + '</b></div>' +
-      '<div class="om-note">Offline bars don\'t count toward the next era.</div>' +
+      '<div class="om-note">Offline earnings cap at ' + capH + ' hours.<br>They don\'t count toward the next era.</div>' +
       '<button class="om-btn" type="button">COLLECT</button></div>';
     const close = () => wrap.remove();
     wrap.querySelector('.om-btn').addEventListener('click', close);
