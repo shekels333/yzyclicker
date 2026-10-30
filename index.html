@@ -1649,7 +1649,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
           <div class="sm-label">Danger Zone</div>
           <button class="sm-btn danger" id="sm-reset-btn"><span class="sm-icon">🗑</span> Reset</button>
           <div id="sm-reset-confirm" style="display:none">
-            <div>This will <strong>wipe your save</strong> and remove you from the leaderboard. Are you sure?</div>
+            <div>This will <strong>wipe your save</strong> and remove you from the ¥ Board (all-time and weekly). You keep your name. Are you sure?</div>
             <div class="ng-btns">
               <button id="sm-reset-yes">✕ RESET EVERYTHING</button>
               <button id="sm-reset-no">CANCEL</button>
@@ -7794,6 +7794,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // Calls a secret-checked RPC for `name`. Returns the JSON result, or null on network error.
   async function ownedRpc(fn, name, args, keepalive) {
     if (!CONFIGURED || !hasProfile() || !name) return null;
+    if (window._yzy_resetting) return null;   // a reset/delete is in progress: never re-post old data
     const res = await sbFetch('rpc/' + fn, { method: 'POST', prefer: 'return=representation', keepalive: !!keepalive,
       body: JSON.stringify(Object.assign({ p_username: String(name).toUpperCase(), p_secret: getSecret(name) }, args || {})) });
     if (res && res.reason === 'taken') noteTaken(name);
@@ -7805,7 +7806,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   // ── Submit score (upsert by username) ──
   async function submitScore(silent) {
-    if (!CONFIGURED || !hasProfile()) return;
+    if (!CONFIGURED || !hasProfile() || window._yzy_resetting) return;
     const username   = getUsername();
     if (window._yzyNameTaken === username) { if (!silent) setSubmitStatus("Name owned by another player"); return; }
     const now        = Date.now();
@@ -8109,12 +8110,22 @@ document.getElementById("shop").addEventListener("click", (e) => {
   };
 
   // Exposed for reset: leaderboard row delete — returns a promise so reset can await it
-  window._lbDelete = function(usernameOverride) {
-    if (!CONFIGURED) return Promise.resolve();
+  // Resolves {ok:true} when the server removed the player, else {ok:false, reason}.
+  // release=true also frees the name claim (used when the name key is being deleted).
+  window._lbDelete = function(usernameOverride, release, timeoutMs) {
+    if (!CONFIGURED) return Promise.resolve({ ok: true, reason: 'offline-mode' });
     const username = usernameOverride || getUsername();
-    // Server checks the name key; deletes this player's cloud save + all-time row.
-    return sbFetch('rpc/yzy_delete', { method: 'POST', prefer: 'return=representation',
-      body: JSON.stringify({ p_username: String(username).toUpperCase(), p_secret: getSecret(username, false) || '' }) }).catch(() => {});
+    if (!username) return Promise.resolve({ ok: true, reason: 'no-name' });
+    const secret = getSecret(username, false);
+    if (!secret) return Promise.resolve({ ok: false, reason: 'no-key' });
+    const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const t = ac ? setTimeout(() => ac.abort(), timeoutMs || 4000) : null;
+    // Server checks the name key; deletes cloud save + all-time + weekly rows (and the claim if release).
+    return sbFetch('rpc/yzy_delete', { method: 'POST', prefer: 'return=representation', signal: ac ? ac.signal : undefined,
+      body: JSON.stringify({ p_username: String(username).toUpperCase(), p_secret: secret, p_release: !!release }) })
+      .then(r => (r && r.ok) ? { ok: true } : { ok: false, reason: (r && r.reason) || 'error' })
+      .catch(() => ({ ok: false, reason: 'network' }))
+      .finally(() => { if (t) clearTimeout(t); });
   };
 
   // Also submit on milestone unlocks (score jumps)
@@ -8702,9 +8713,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
         + (tsStr ? '<div style="font-size:10px;opacity:0.35;letter-spacing:0.5px;padding-left:20px">' + tsStr + '</div>' : '');
       const dispName = (function(){ try { const so = JSON.parse(localStorage.getItem(p.key) || 'null'); if (so && so.username) return String(so.username); } catch(e) {} return p.slug.replace(/_/g,' '); })().toUpperCase();
       list.appendChild(rowWrap(btn, 'Delete profile ' + dispName + ' from this device', () => {
-        if (!window.confirm('Delete profile ' + dispName + ' (' + (barsStr || '¥0') + ' lifetime) from this device? This can\'t be undone.\n\nIts local save, backups and name key on this device are removed. The cloud copy and the name claim are not touched, but without the key (or an export code) you may not be able to use this name again.')) return;
+        if (!window.confirm('Delete profile ' + dispName + ' (' + (barsStr || '¥0') + ' lifetime)? This can\'t be undone.\n\nIts local save, backups and name key on this device are removed, it is removed from the ¥ Board (all-time and weekly) along with its cloud save, and the name ' + dispName + ' is freed for anyone to use.')) return;
+        const delP = window._lbDelete ? window._lbDelete(dispName, true) : Promise.resolve({ ok: true });
         deleteLocalProfile(p.slug); renderProfileList();
         if (document.getElementById('sm-backups-list').style.display === 'flex') renderBackups();
+        delP.then(r => { if (!r || !r.ok) window.yzyToast && window.yzyToast('Profile ' + dispName + ' was deleted from this device, but its ¥ Board entry couldn\'t be removed' + (r && r.reason === 'network' ? ' (network error).' : '.'), true); });
       }));
       btn.addEventListener('click', () => {
         // Save current game first (skip if another tab owns newer data)
@@ -8926,6 +8939,10 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
     // 0. Grab username BEFORE wiping localStorage — deletes need it
     const usernameToDelete = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || '');
+    // Stop any queued/new submits or cloud saves from re-posting the old score.
+    window._yzy_resetting = true;
+    // Remove from ¥ Board + cloud first (reads the name key now); keep the name claim.
+    const delP = (localStorage.getItem('yzy_username') && window._lbDelete) ? window._lbDelete(usernameToDelete, false) : Promise.resolve({ ok: true });
 
     // 1. Snapshot every profile (backups live under yzy_bak_ and survive the wipe)
     try { if (!staleTab) writeSave(getSaveKey(), buildSaveObject()); } catch(e) {}
@@ -8946,18 +8963,15 @@ document.getElementById("shop").addEventListener("click", (e) => {
       localStorage.removeItem('ye_panel_w');
     } catch(e) {}
 
-    // 2. Set a hard reload timeout — page WILL reload within 2s no matter what
-    const reloadTimer = setTimeout(() => location.reload(), 2000);
+    // 2. Hard reload timeout — page WILL reload within 6s no matter what
+    const reloadTimer = setTimeout(() => location.reload(), 6000);
 
-    // 3. Fire deletes and reload as soon as they finish (or on error)
-    Promise.all([
-      window._lbDelete        ? window._lbDelete(usernameToDelete)        : Promise.resolve(),
-      window._cloudSaveDelete ? window._cloudSaveDelete(usernameToDelete) : Promise.resolve()
-    ])
-    .catch(() => {})
-    .finally(() => {
+    // 3. Reload as soon as the delete finishes; on failure show a note first
+    delP.catch(() => ({ ok: false })).then(r => {
       clearTimeout(reloadTimer);
-      location.reload();
+      if (r && r.ok) { location.reload(); return; }
+      if (window.yzyToast) window.yzyToast('Your save was wiped on this device, but your ¥ Board entry couldn\'t be removed' + (r && r.reason === 'network' ? ' (network error).' : '.'), true);
+      setTimeout(() => location.reload(), 2500);
     });
   });
 
