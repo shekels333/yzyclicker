@@ -867,6 +867,8 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
   #dropout-blots {
     position: fixed;
     inset: 0;
+    width: 100%;
+    height: 100%;
     z-index: 1;
     pointer-events: none;
     opacity: 0;
@@ -4892,6 +4894,15 @@ function initDropoutBlots() {
   for (let i = 0; i < BLOT_COUNT; i++) BLOTS.push(makeBlot());
   if (!blotsActive) { blotsActive = true; requestAnimationFrame(tickBlots); }
 }
+
+// Keep the blot canvas bitmap matched to the viewport (iOS Chrome can report a
+// narrower innerWidth during load, which left a hard edge at ~x=317).
+window.addEventListener("resize", () => {
+  if (!blotsCanvas) return;
+  if (blotsCanvas.width !== innerWidth || blotsCanvas.height !== innerHeight) {
+    blotsCanvas.width = innerWidth; blotsCanvas.height = innerHeight;
+  }
+});
 
 function stopDropoutBlots() {
   blotsActive = false;
