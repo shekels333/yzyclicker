@@ -11,7 +11,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,[tabindex]:focus-visibl
 button{transition:filter .15s ease,border-color .15s ease,background-color .15s ease,color .15s ease}
 @media (hover:hover){button:not(:disabled):hover{filter:brightness(1.12)}}
 #lb-week-reset{font-family:'Space Mono',monospace!important;font-size:11px;letter-spacing:.5px;font-weight:700}
-#lb-rank-note,#rank-toast,#offline-modal .om-card{font-family:'Space Mono',monospace}
+#lb-rank-note,#rank-toast{font-family:'Space Mono',monospace}
 </style>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1483,14 +1483,6 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
     .era-sq.active { animation: none !important; }
     #click-wrap:hover #click-btn { transform: none; }
   }
-  #offline-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);padding:16px}
-#offline-modal .om-card{background:#0b0b0b;border:2px solid var(--era-primary,#fff);box-shadow:0 0 24px var(--era-accent,#fff);border-radius:12px;padding:22px 26px;text-align:center;max-width:340px;width:100%;color:#fff;font-family:inherit}
-#offline-modal .om-title{letter-spacing:.15em;font-size:13px;color:var(--era-accent,#fff);margin-bottom:6px}
-#offline-modal .om-time{font-size:15px;opacity:.8}
-#offline-modal .om-amt{font-size:20px;margin:10px 0 16px}
-#offline-modal .om-amt b{color:var(--era-primary,#fff)}
-#offline-modal .om-note{font-family:'Inter',system-ui,-apple-system,sans-serif;font-size:11px;line-height:1.4;color:rgba(255,255,255,.5);margin:-8px 0 14px}
-#offline-modal .om-btn{background:var(--era-primary,#fff);color:#000;border:0;border-radius:8px;padding:10px 28px;font-weight:700;letter-spacing:.1em;cursor:pointer;font-family:inherit;font-size:14px}
 #lb-rank-note{display:none;margin:4px 0 6px;padding:6px 10px;border:1px solid var(--era-primary,#fff);border-radius:6px;color:var(--era-accent,#fff);font-size: 11px;letter-spacing:.04em;text-align:center font-family: var(--small-font, var(--mono-font));}
 #rank-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99998;background:#0b0b0b;border:1px solid var(--era-primary,#fff);color:var(--era-accent,#fff);padding:10px 16px;border-radius:8px;font-size:12px;max-width:calc(100vw - 32px);text-align:center;pointer-events:none}
 
@@ -2131,7 +2123,8 @@ const FASHION = [
 // ─── STATE ───────────────────────────────────────────────────────────────────
 
 let bars = 0, totalBars = 0, clickPower = 1, genMult = 1;
-// Bars earned while offline: spendable + count for the boards, but never for era unlocks.
+// Legacy: bars older saves earned offline (offline earnings were removed). Kept so
+// era progress for those saves doesn't jump; never grows any more.
 let offlineBars = 0;
 function eraBars() { return Math.max(0, totalBars - (offlineBars || 0)); }
 // Highest era index ever unlocked (persisted) so threshold rebalances never re-lock eras.
@@ -7145,8 +7138,10 @@ function spawnDove() {
 
 // ─── GAME TICK ───────────────────────────────────────────────────────────────
 
+const HIDDEN_GRACE_MS = 5000;   // background tabs stop earning after this (no offline progress)
 setInterval(() => {
   if (paused) return;
+  if (document.hidden && window._yzyHiddenAt && Date.now() - window._yzyHiddenAt > HIDDEN_GRACE_MS) return;
   const rate = getBps();
   if (rate > 0) {
     bars += rate / 20;
@@ -8224,7 +8219,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     const fresh = freshSeasonSave(o);
     const slug = slugOf(fresh.username);
     try { if ((Number(o.totalBars) || 0) > 0) backupRaw(slug, JSON.stringify(o), 'legacy'); } catch(e) {}
-    try { localStorage.setItem(SAVE_PREFIX + slug, JSON.stringify(fresh)); localStorage.setItem(SAVE_PREFIX + slug + '_offclaim', String(fresh.lastSeen)); } catch(e) {}
+    try { localStorage.setItem(SAVE_PREFIX + slug, JSON.stringify(fresh)); } catch(e) {}
     if ((Number(o.totalBars) || 0) > 0) seasonNotice();
     return fresh;
   }
@@ -8538,12 +8533,10 @@ document.getElementById("shop").addEventListener("click", (e) => {
       localStorage.setItem('yzy_username', importedName);
       localStorage.removeItem('yzy_twitter');
       // ts/lastSeen = now: the import must beat older cloud copies on next load
-      // and must not trigger offline earnings for the time the code sat around.
       const saveObj = buildSaveObject();
       saveObj.username = importedName;
       try { localStorage.setItem(targetKey, JSON.stringify(saveObj)); }
       catch(e) { writeSave(targetKey, saveObj); }
-      try { localStorage.setItem(targetKey + '_offclaim', String(saveObj.lastSeen)); } catch(e) {}
       staleTab = false;
       cloudSaveTs = Date.now();
       adoptImportedKey(importedName, codeSec).then(() => pushCloudSave(saveObj));
@@ -8832,7 +8825,6 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const now = Date.now();
       const obj = Object.assign({}, o, { v: 2, username: name, ts: now, lastSeen: now, tab: TAB_ID });
       localStorage.setItem(key, JSON.stringify(obj));
-      localStorage.setItem(key + '_offclaim', String(now));
       localStorage.setItem('yzy_username', name);
       window._yzy_resetting = true;     // don't let unload handlers overwrite what we just wrote
       msg.style.color = '#3ddc84'; msg.textContent = '✓ Restored — reloading…';
@@ -9036,82 +9028,15 @@ document.getElementById("shop").addEventListener("click", (e) => {
         }
       }
     }
-    // Offline earnings: once, from whichever save actually won (local OR cloud).
-    if (startupObj) setTimeout(() => awardOffline(startupObj.lastSeen, 0), 120);
-    offlineReady = true;
   })();
 
-  // ── OFFLINE EARNINGS ──
-  // Award = gen-only bars/sec × elapsed (clamped 60s..8h) × 0.5. Never counts
-  // as clicks, never pushes totalBars past the season cap (SEASON_CAP).
-  const OFF_MIN_MS = 60 * 1000, OFF_MAX_MS = 8 * 3600 * 1000, OFF_EFF = 0.5;
-  let offlineReady = false, hiddenAt = 0, hiddenTotal = 0;
-  function aliveKey()   { return getSaveKey() + '_alive'; }
-  function claimedKey() { return getSaveKey() + '_offclaim'; }
-  function heartbeat() {
-    if (document.hidden) return;
-    try { localStorage.setItem(aliveKey(), JSON.stringify({ id: TAB_ID, t: Date.now() })); } catch(e) {}
-  }
-  function otherTabActive() {
-    try {
-      const a = JSON.parse(localStorage.getItem(aliveKey()) || 'null');
-      return !!(a && a.id !== TAB_ID && Date.now() - a.t < 15000);
-    } catch(e) { return false; }
-  }
-  function awardOffline(lastSeen, alreadyEarned) {
-    lastSeen = Number(lastSeen);
-    if (!Number.isFinite(lastSeen) || lastSeen <= 0) { heartbeat(); return 0; } // old save: no award
-    if (otherTabActive()) return 0;                       // another tab is playing
-    try { if (localStorage.getItem(claimedKey()) === String(lastSeen)) return 0; } catch(e) {}
-    const now = Date.now();
-    const elapsed = now - lastSeen;
-    heartbeat();
-    if (elapsed < OFF_MIN_MS) return 0;                    // also catches clock rollback (negative)
-    try { localStorage.setItem(claimedKey(), String(lastSeen)); } catch(e) {}
-    const secs = Math.min(elapsed, OFF_MAX_MS) / 1000;
-    let award = getBps() * secs * OFF_EFF - (alreadyEarned || 0);
-    award = Math.min(award, SEASON_CAP - totalBars);
-    if (!Number.isFinite(award) || award < 1) { saveGame(true); return 0; }
-    award = Math.floor(award);
-    bars += award; totalBars += award; offlineBars += award;                     // totalClicks untouched
-    saveGame(true);                                        // writes lastSeen = now
-    updateUI();
-    showOfflineModal(Math.min(elapsed, OFF_MAX_MS), award, elapsed > OFF_MAX_MS);
-    return award;
-  }
-  window._yzyAwardOffline = awardOffline;
-  function showOfflineModal(ms, award, capped) {
-    const old = document.getElementById('offline-modal'); if (old) old.remove();
-    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
-    const capH = Math.round(OFF_MAX_MS / 3600000);
-    const wrap = document.createElement('div');
-    wrap.id = 'offline-modal';
-    wrap.innerHTML = '<div class="om-card"><div class="om-title">WHILE YOU WERE AWAY</div>' +
-      '<div class="om-time">' + (h ? h + 'h ' : '') + m + 'm' + (capped ? ' (capped at ' + capH + 'h)' : '') + '</div>' +
-      '<div class="om-amt">you made <b>¥' + formatNum(award) + '</b></div>' +
-      '<div class="om-note">Offline earnings cap at ' + capH + ' hours.<br>They don\'t count toward the next era.</div>' +
-      '<button class="om-btn" type="button">COLLECT</button></div>';
-    const close = () => wrap.remove();
-    wrap.querySelector('.om-btn').addEventListener('click', () => { window.yzySfx && yzySfx.play('collect'); close(); });
-    wrap.addEventListener('click', e => { if (e.target === wrap) { window.yzySfx && yzySfx.play('close'); close(); } });
-    document.body.appendChild(wrap);
-  }
-  setInterval(heartbeat, 5000);
+  // No offline progress: time away (closed tab, reload, long background) earns nothing.
+  // The game tick also stops generating once the tab has been hidden for a few seconds.
   document.addEventListener('visibilitychange', () => {
     if (window._yzy_resetting) return;
-    if (!document.hidden && staleTab) { resyncFromStorage(); hiddenAt = 0; heartbeat(); return; }
-    if (document.hidden) {
-      hiddenAt = Date.now(); hiddenTotal = totalBars;
-      saveGame(true);
-    } else if (offlineReady && hiddenAt && Date.now() - hiddenAt > OFF_MIN_MS) {
-      // Background tab may have ticked a little; subtract what it already earned.
-      const earned = Math.max(0, totalBars - hiddenTotal);
-      try {
-        const o = JSON.parse(localStorage.getItem(getSaveKey()) || 'null');
-        awardOffline(o && o.lastSeen, earned);
-      } catch(e) {}
-      hiddenAt = 0;
-    } else { hiddenAt = 0; heartbeat(); }
+    if (document.hidden) { window._yzyHiddenAt = Date.now(); saveGame(true); return; }
+    window._yzyHiddenAt = 0;
+    if (staleTab) resyncFromStorage();
   });
   window.addEventListener('pagehide', () => { if (!window._yzy_resetting) saveGame(true, true); });
 })();
