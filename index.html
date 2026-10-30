@@ -12,6 +12,13 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 @media (hover:hover){button:not(:disabled):hover{filter:brightness(1.12)}}
 #lb-week-reset{font-family:'Space Mono',monospace!important;font-size:11px;letter-spacing:.5px;font-weight:700}
 #lb-rank-note,#rank-toast{font-family:'Space Mono',monospace}
+#prestige-card{margin:10px 16px 0;padding:8px 10px;border:1px solid rgba(255,211,77,.25);border-radius:10px;background:rgba(255,211,77,.05);font-size:11px;letter-spacing:.5px;color:#d9c27a}
+#prestige-card[data-state=ready]{border-color:#ffd34d;background:rgba(255,211,77,.12);box-shadow:0 0 14px rgba(255,211,77,.25)}
+#prestige-card .pc-bar{height:3px;margin-top:5px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+#prestige-card .pc-bar i{display:block;height:100%;background:#ffd34d}
+#prestige-card .pc-bonus{margin-top:4px;color:#ffd34d;font-weight:700}
+#prestige-btn{width:100%;padding:9px;border:0;border-radius:8px;background:linear-gradient(90deg,#ffd34d,#ffb300);color:#1a1200;font-weight:900;letter-spacing:1px;font-size:13px;cursor:pointer}
+.lb-prestige{color:#ffd34d;font-size:.85em}
 </style>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1695,6 +1702,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
         <div id="stats-box">
           <div class="stats-row"><span>Click Power</span><span id="stat-click"></span></div>
           <div class="stats-row"><span>Gen Mult</span><span id="stat-gen"></span></div>
+          <div class="stats-row" id="stat-plaques-row" style="display:none"><span>Gold Plaques</span><span id="stat-plaques"></span></div>
         </div>
       </div>
 
@@ -2126,7 +2134,35 @@ let bars = 0, totalBars = 0, clickPower = 1, genMult = 1;
 // Legacy: bars older saves earned offline (offline earnings were removed). Kept so
 // era progress for those saves doesn't jump; never grows any more.
 let offlineBars = 0;
-function eraBars() { return Math.max(0, totalBars - (offlineBars || 0)); }
+// ─── PRESTIGE ───
+// runBars: bars earned in the current prestige run (drives eras). totalBars stays lifetime.
+let runBars = 0, prestigeLevel = 0, prestigeBars = 0, plaques = 0, eraBest = 0;
+// Before the first prestige the run is the whole (non-legacy-offline) lifetime.
+function eraBars() { return prestigeLevel > 0 ? Math.max(0, runBars) : Math.max(0, totalBars - (offlineBars || 0)); }
+const PRESTIGE_ERA = 14; // Trillionbear
+function prestigeNeed() { return ALBUM_THEMES[PRESTIGE_ERA].threshold; }
+// Gold Plaques are derived from lifetime banked run bars: floor(4·sqrt(L / 33T)).
+function plaquesFor(L) { return L > 0 ? Math.floor(4 * Math.sqrt(L / prestigeNeed()) + 1e-9) : 0; }
+function plaqueMult() { return 1 + 0.1 * plaques; }
+function prestigeGain() { const rb = eraBars(); return rb >= prestigeNeed() ? Math.max(0, plaquesFor(prestigeBars + rb) - plaques) : 0; }
+function prestigeReady() { return prestigeGain() >= 1; }
+function nextPlaqueRunBars() { const k = plaques + 1; return Math.max(prestigeNeed(), Math.ceil((k / 4) * (k / 4) * prestigeNeed() - prestigeBars)); }
+// Never trust saved plaques/levels: clamp to what lifetime bars can support and recompute.
+function sanitizePrestige(o, tb, ob) {
+  const n = v => { v = Number(v); return Number.isFinite(v) && v > 0 ? v : 0; };
+  let rb = (o && o.runBars !== undefined && o.runBars !== null) ? n(o.runBars) : Math.max(0, tb - (ob || 0));
+  if (rb > tb) rb = tb;
+  let L = n(o && o.prestigeBars);
+  if (L > tb - rb) L = Math.max(0, tb - rb);
+  let lvl = Math.min(500, Math.floor(n(o && o.prestigeLevel)), Math.floor(L / prestigeNeed() + 1e-9));
+  if (lvl <= 0) { lvl = 0; L = 0; rb = Math.max(0, tb - (ob || 0)); }
+  const eb = Math.min(ALBUM_THEMES.length - 1, Math.floor(n(o && o.eraBest)));
+  return { runBars: rb, prestigeBars: L, prestigeLevel: lvl, plaques: plaquesFor(L), eraBest: lvl > 0 ? Math.max(eb, PRESTIGE_ERA) : 0 };
+}
+function applyPrestigeState(o) {
+  const r = sanitizePrestige(o, totalBars, offlineBars);
+  runBars = r.runBars; prestigeBars = r.prestigeBars; prestigeLevel = r.prestigeLevel; plaques = r.plaques; eraBest = r.eraBest;
+}
 // Highest era index ever unlocked (persisted) so threshold rebalances never re-lock eras.
 let eraMax = 0;
 function eraUnlockedRaw(i) { return i === 0 || eraBars() >= ALBUM_THEMES[i].threshold; }
@@ -2135,9 +2171,9 @@ function eraUnlocked(i) { return i <= syncEraMax() || eraUnlockedRaw(i); }
 function eraUnlockCount() { let n = 0; for (let i = 0; i < ALBUM_THEMES.length; i++) if (eraUnlocked(i)) n = i + 1; return n; }
 // Sanitize a saved eraMax: never beyond what the save's bars earned under old (legacy) or new thresholds.
 // Saves from before eraMax existed get credit for eras they earned under the old thresholds.
-function sanitizeEraMax(raw, eb) {
+function sanitizeEraMax(raw, eb, strict) {
   let legit = 0;
-  ALBUM_THEMES.forEach((a, i) => { if (i === 0 || eb >= Math.min(a.threshold, a.legacyThreshold || a.threshold)) legit = i; });
+  ALBUM_THEMES.forEach((a, i) => { if (i === 0 || eb >= (strict ? a.threshold : Math.min(a.threshold, a.legacyThreshold || a.threshold))) legit = i; });
   if (raw === undefined || raw === null) return legit;
   const v = Math.floor(Number(raw));
   return Number.isFinite(v) && v > 0 ? Math.min(v, legit) : 0;
@@ -2321,8 +2357,9 @@ function recomputeMultsFromPurchases() {
     if (!boughtFashion.has(item.id)) return;
     if (item.type === "gen") gm *= item.mult;
   });
-  clickPower = cp;
-  genMult = gm;
+  const pm = (typeof plaqueMult === 'function') ? plaqueMult() : 1;
+  clickPower = cp * pm;
+  genMult = gm * pm;
 }
 window.recomputeMultsFromPurchases = recomputeMultsFromPurchases;
 
@@ -2476,6 +2513,7 @@ function applyTheme(T, instant) {
   document.querySelectorAll(".stats-row").forEach(r => r.style.color = T.muted);
   document.getElementById("stat-click").style.color = T.accent;
   document.getElementById("stat-gen").style.color = T.accent;
+  { const sp = document.getElementById("stat-plaques"); if (sp) sp.style.color = "#ffd34d"; }
 
   const tabs = document.getElementById("tabs");
   tabs.style.background = T.headerBg;
@@ -2875,6 +2913,11 @@ function renderShop() {
     label.id = "shop-label";
     label.style.color = T.muted;
     label.textContent = "PERFORMANCES — ONE TIME BOOSTS";
+    const pc = document.createElement("div");
+    pc.id = "prestige-card";
+    pc.addEventListener("click", e => { if (e.target.closest("#prestige-btn")) promptPrestige(); });
+    shop.appendChild(pc);
+    updatePrestigeCard();
     shop.appendChild(label);
 
     const grid = document.createElement("div");
@@ -2995,6 +3038,7 @@ function updateShopValues() {
   } else if (currentTab === "leaderboard") {
     return; // leaderboard manages its own rendering
   } else {
+    updatePrestigeCard();
     const visibleNow = getVisibleUpgIndices();
     const renderedIds = new Set([...document.querySelectorAll(".upg-card[data-upg-id]")].map(c => c.dataset.upgId));
     const visibleIds = new Set([...visibleNow].map(i => UPGRADES[i].id));
@@ -3094,6 +3138,7 @@ document.getElementById("click-wrap").addEventListener("click", (e) => {
   bars += clickPower;
   totalClicks++;
   totalBars += clickPower;
+  runBars += clickPower;
   recordClickForBps();
 
   const btn = document.getElementById("click-btn");
@@ -7155,6 +7200,7 @@ setInterval(() => {
   if (rate > 0) {
     bars += rate * dt;
     totalBars += rate * dt;
+    runBars += rate * dt;
     checkMilestone();
     updateProgression();
     updateCounters();
@@ -7180,6 +7226,66 @@ function checkMilestone() {
   }
 }
 
+function updatePrestigeCard() {
+  const pc = document.getElementById("prestige-card");
+  if (!pc) return;
+  const need = prestigeNeed();
+  const bonus = plaques > 0 ? `<div class="pc-bonus">🏆 ${plaques} Gold Plaque${plaques === 1 ? "" : "s"} · +${plaques * 10}% all income · ★${prestigeLevel}</div>` : "";
+  let state, html;
+  if (prestigeReady()) {
+    const g = prestigeGain();
+    state = "ready";
+    html = `<button id="prestige-btn" type="button">PRESTIGE → +${g} 🏆</button>${bonus}`;
+  } else if (eraBars() >= need) {
+    state = "more";
+    html = `<div class="pc-line">🏆 Prestige: next plaque at ¥${formatNum(nextPlaqueRunBars())} this run</div>${bonus}`;
+  } else {
+    state = "locked";
+    const pct = Math.max(0, Math.min(100, eraBars() / need * 100));
+    html = `<div class="pc-line">🔒 Prestige at Trillionbear · ${pct < 1 ? pct.toFixed(2) : pct.toFixed(0)}%</div><div class="pc-bar"><i style="width:${pct.toFixed(2)}%"></i></div>${bonus}`;
+  }
+  if (pc._html !== html) { pc._html = html; pc.innerHTML = html; pc.dataset.state = state; }
+}
+window.updatePrestigeCard = updatePrestigeCard;
+function promptPrestige() {
+  if (!prestigeReady() || paused) return;
+  const g = prestigeGain(), np = plaques + g;
+  const msg = `PRESTIGE for +${g} Gold Plaque${g === 1 ? "" : "s"}?\n\n` +
+    `You'll have ${np} plaques = +${np * 10}% to ALL income (clicks + generators), forever.\n\n` +
+    `RESETS: bars, generators, performances, fashion, and eras (back to College Dropout).\n` +
+    `KEEPS: your name, lifetime ¥ on the leaderboard, clicks, plaques, milestones, settings.`;
+  if (!confirm(msg)) return;
+  doPrestige();
+}
+function doPrestige() {
+  if (!prestigeReady()) return false;
+  const g = prestigeGain();
+  if (typeof resetEraBonus === "function") resetEraBonus();
+  eraBest = Math.max(eraBest, syncEraMax());
+  prestigeBars += eraBars();
+  prestigeLevel = Math.min(500, prestigeLevel + 1);
+  plaques = plaquesFor(prestigeBars);
+  bars = 0; runBars = 0; offlineBars = 0; eraMax = 0;
+  Object.keys(owned).forEach(k => { owned[k] = 0; });
+  boughtUpgrades = new Set(); boughtFashion = new Set();
+  recomputeMultsFromPurchases();
+  lastUnlockCount = eraUnlockCount();
+  if (albumIdx !== 0) { albumIdx = 0; try { applyTheme(ALBUM_THEMES[0], true); } catch(e) {} }
+  try { renderEraDots(); } catch(e) {}
+  try { renderShop(); } catch(e) {}
+  try { updateUI(); } catch(e) {}
+  if (window.saveGame) { try { window.saveGame(true); } catch(e) {} }
+  if (window.lbAutoSubmit) { try { window.lbAutoSubmit(); } catch(e) {} }
+  const sub = document.getElementById("milestone-sub");
+  const oldSub = sub ? sub.textContent : "";
+  if (sub) sub.textContent = `🏆 GOLD PLAQUE${g === 1 ? "" : "S"} — +${plaques * 10}% ALL INCOME 🏆`;
+  fireMilestone("+" + g + " 🏆");
+  setTimeout(() => { if (sub) sub.textContent = oldSub; }, 2900);
+  return true;
+}
+window.doPrestige = doPrestige;
+window._yzyPrestige = () => ({ runBars, prestigeBars, prestigeLevel, plaques, eraBest, gain: prestigeGain(), ready: prestigeReady() });
+
 function fireMilestone(val) {
   paused = true;
   const T = ALBUM_THEMES[albumIdx];
@@ -7187,7 +7293,7 @@ function fireMilestone(val) {
 
   // Number display
   const num = document.getElementById("milestone-number");
-  num.textContent = val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  num.textContent = typeof val === "string" ? val : val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   num.style.color = T.accent;
   num.style.textShadow = `0 0 40px ${T.accent}cc, 0 0 80px ${T.primary}88`;
   document.getElementById("milestone-sub").style.color = T.primary;
@@ -7372,6 +7478,7 @@ function updateCounters() {
   document.getElementById("header-clicks-val").textContent = formatNum(totalClicks);
   document.getElementById("stat-click").textContent = formatNum(clickPower);
   document.getElementById("stat-gen").textContent = "×" + genMult.toFixed(1);
+  { const pr = document.getElementById("stat-plaques-row"); if (pr) { pr.style.display = plaques > 0 ? "" : "none"; document.getElementById("stat-plaques").textContent = "🏆" + plaques + " (+" + (plaques * 10) + "%)"; } }
 
   // Notification dots — light up if something is affordable and not yet bought
   const hasUpg = UPGRADES.some(u => !boughtUpgrades.has(u.id) && bars >= u.cost);
@@ -7429,8 +7536,9 @@ function readSavedAlbumIdx() {
     const o = JSON.parse(raw);
     if (!o || o.v !== 2) return 0;
     const i = Math.floor(Number(o.albumIdx) || 0);
-    const tb = Math.max(0, (Number(o.totalBars) || 0) - (Number(o.offlineBars) || 0));
-    const em = sanitizeEraMax(o.eraMax, tb);
+    const ps = sanitizePrestige(o, Math.max(0, Number(o.totalBars) || 0), Math.max(0, Number(o.offlineBars) || 0));
+    const tb = ps.runBars;
+    const em = sanitizeEraMax(o.eraMax, tb, ps.prestigeLevel > 0);
     let unlocked = em + 1; ALBUM_THEMES.forEach((a, k) => { if (k === 0 || tb >= a.threshold) unlocked = Math.max(unlocked, k + 1); });
     return (i >= 0 && i < unlocked) ? i : unlocked - 1;
   } catch(e) { return 0; }
@@ -7562,7 +7670,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (!available) { pmErr.textContent = 'That name is taken by another player — try a different one.'; return; }
 
     // Wipe all in-memory game state so nothing bleeds in from a previous session
-    bars = 0; totalBars = 0; offlineBars = 0; eraMax = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+    bars = 0; totalBars = 0; offlineBars = 0; eraMax = 0; runBars = 0; prestigeBars = 0; prestigeLevel = 0; plaques = 0; eraBest = 0; totalClicks = 0; clickPower = 1; genMult = 1;
     Object.keys(owned).forEach(k => { owned[k] = 0; });
     boughtUpgrades = new Set(); boughtFashion = new Set();
     albumIdx = 0; lastMilestone = -1;
@@ -7719,7 +7827,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     try {
       const res = await ownedRpc('yzy_weekly_submit_v2', getUsername(), { p_total_bars: cappedTotal(), p_total_clicks: Math.floor(totalClicks),
           p_era: ALBUM_THEMES[albumIdx] ? ALBUM_THEMES[albumIdx].name : null,
-          p_twitter: (window.getTwitterHandle ? window.getTwitterHandle() : '') || null });
+          p_twitter: (window.getTwitterHandle ? window.getTwitterHandle() : '') || null, p_prestige: prestigeLevel });
       if (res && res.ok && typeof res.need_clicks === 'number') weeklyNeed = res.need_clicks;
       if (window.updateRankNote) updateRankNote();
     } catch(e) { /* weekly is best-effort; never blocks all-time */ }
@@ -7853,7 +7961,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     try {
       const r = await ownedRpc('yzy_lb_submit', username, {
         p_total_bars: cappedTotal(), p_total_clicks: Math.floor(totalClicks),
-        p_era: currentEra, p_twitter: twitterHandle || null });
+        p_era: currentEra, p_twitter: twitterHandle || null, p_prestige: prestigeLevel });
       if (!r || !r.ok) { if (!silent) setSubmitStatus(r && r.reason === 'taken' ? "Name owned by another player" : "Submit failed"); return; }
       setSubmitStatus("✓ Score submitted");
       setTimeout(() => setSubmitStatus(""), 3000);
@@ -7878,13 +7986,13 @@ document.getElementById("shop").addEventListener("click", (e) => {
     try {
       if (lbMode === "week") {
         const w = await sbFetch(
-          "yzy_weekly_board?select=username,score,clicks,current_era,twitter_handle&order=" + (lbSort === "bars" ? "score" : "clicks") + ".desc&limit=50"
+          "yzy_weekly_board?select=username,score,clicks,current_era,twitter_handle,prestige&order=" + (lbSort === "bars" ? "score" : "clicks") + ".desc&limit=50"
         );
-        lbData = (w || []).map(r => ({ username: r.username, total_bars: Number(r.score), total_clicks: Number(r.clicks), era: r.current_era, twitter_handle: r.twitter_handle }));
+        lbData = (w || []).map(r => ({ username: r.username, total_bars: Number(r.score), total_clicks: Number(r.clicks), era: r.current_era, twitter_handle: r.twitter_handle, prestige: r.prestige }));
         throw "done";
       }
       const rows = await sbFetch(
-        TABLE + "?select=username,total_bars,total_clicks,era,twitter_handle&order=" + sortCol + ".desc&limit=50",
+        TABLE + "?select=username,total_bars,total_clicks,era,twitter_handle,prestige&order=" + sortCol + ".desc&limit=50",
         { headers: { "Range-Unit": "items", "Range": "0-49" } }
       );
       lbData = (rows || []).map(r => Object.assign({}, r, { total_bars: Number(r.total_bars), total_clicks: Number(r.total_clicks) }));
@@ -8027,7 +8135,10 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const nameEl = document.createElement("div");
       nameEl.className = "lb-name";
       nameEl.style.color = isMe ? T.accent : T.primary;
-      nameEl.textContent = (row.username || "ANON").toUpperCase() + (isMe ? " ◀" : "");
+      nameEl.textContent = (row.username || "ANON").toUpperCase();
+      const pv = Math.floor(Number(row.prestige) || 0);
+      if (pv > 0) { const b = document.createElement("span"); b.className = "lb-prestige"; b.textContent = " ★" + Math.min(pv, 500); b.title = "Prestige " + pv; nameEl.appendChild(b); }
+      if (isMe) nameEl.appendChild(document.createTextNode(" ◀"));
       nameWrap.appendChild(nameEl);
       if (row.twitter_handle) {
         const twEl = document.createElement("div");
@@ -8215,7 +8326,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   function freshSeasonSave(o) {
     const now = Date.now();
     return { v: 2, season: SEASON, username: (o && o.username) || (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || ''),
-      bars: 0, totalBars: 0, offlineBars: 0, eraMax: 0, totalClicks: 0, clickPower: 1, genMult: 1, albumIdx: 0, owned: {}, upgrades: [], fashion: [],
+      bars: 0, totalBars: 0, offlineBars: 0, eraMax: 0, runBars: 0, prestigeBars: 0, prestigeLevel: 0, plaques: 0, eraBest: 0, totalClicks: 0, clickPower: 1, genMult: 1, albumIdx: 0, owned: {}, upgrades: [], fashion: [],
       lastMilestone: -1, ts: now, lastSeen: now, tab: TAB_ID };
   }
   function seasonNotice() {
@@ -8282,6 +8393,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
       totalBars: totalBars,
       offlineBars: offlineBars,
       eraMax: eraMax,
+      runBars: eraBars(),
+      prestigeBars: prestigeBars,
+      prestigeLevel: prestigeLevel,
+      plaques: plaques,
+      eraBest: eraBest,
       totalClicks: totalClicks,
       clickPower: clickPower,
       genMult: genMult,
@@ -8364,12 +8480,13 @@ document.getElementById("shop").addEventListener("click", (e) => {
       offlineBars = Number(obj.offlineBars) || 0;
       if (!Number.isFinite(offlineBars) || offlineBars < 0) offlineBars = 0;
       if (offlineBars > totalBars) offlineBars = totalBars;
-      eraMax = sanitizeEraMax(obj.eraMax, eraBars());
+      applyPrestigeState(obj);
+      eraMax = sanitizeEraMax(obj.eraMax, eraBars(), prestigeLevel > 0);
       clickPower  = Number(obj.clickPower)  || 1;
       genMult     = Number(obj.genMult)     || 1;
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
       boughtFashion  = new Set(Array.isArray(obj.fashion)  ? obj.fashion  : []);
-      owned = sanitizeOwnedMap(obj.owned, totalBars);
+      owned = sanitizeOwnedMap(obj.owned, prestigeLevel > 0 ? runBars : totalBars);
       if (obj.lastMilestone !== undefined) lastMilestone = Number(obj.lastMilestone);
       if (window.recomputeMultsFromPurchases) recomputeMultsFromPurchases();
       lastUnlockCount = eraUnlockCount();
@@ -8416,12 +8533,13 @@ document.getElementById("shop").addEventListener("click", (e) => {
       offlineBars = Number(obj.offlineBars) || 0;
       if (!Number.isFinite(offlineBars) || offlineBars < 0) offlineBars = 0;
       if (offlineBars > totalBars) offlineBars = totalBars;
-      eraMax = sanitizeEraMax(obj.eraMax, eraBars());
+      applyPrestigeState(obj);
+      eraMax = sanitizeEraMax(obj.eraMax, eraBars(), prestigeLevel > 0);
       clickPower  = Number(obj.clickPower)  || 1;
       genMult     = Number(obj.genMult)     || 1;
       boughtUpgrades = new Set(Array.isArray(obj.upgrades) ? obj.upgrades : []);
       boughtFashion  = new Set(Array.isArray(obj.fashion)  ? obj.fashion  : []);
-      owned = sanitizeOwnedMap(obj.owned, totalBars);
+      owned = sanitizeOwnedMap(obj.owned, prestigeLevel > 0 ? runBars : totalBars);
       // If the anti-cheat check dropped generators, keep the original so it can be restored.
       try {
         const rawN = obj.owned ? Object.values(obj.owned).reduce((a, n) => a + (Number(n) || 0), 0) : 0;
@@ -8734,7 +8852,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
         localStorage.removeItem('yzy_twitter');
 
         // Reset state
-        bars = 0; totalBars = 0; offlineBars = 0; eraMax = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+        bars = 0; totalBars = 0; offlineBars = 0; eraMax = 0; runBars = 0; prestigeBars = 0; prestigeLevel = 0; plaques = 0; eraBest = 0; totalClicks = 0; clickPower = 1; genMult = 1;
         Object.keys(owned).forEach(k => { owned[k] = 0; });
         boughtUpgrades = new Set(); boughtFashion = new Set(); albumIdx = 0;
 
@@ -8891,12 +9009,12 @@ document.getElementById("shop").addEventListener("click", (e) => {
     // below so an older cloud row under this name can't win on next load.)
 
     // 3. Reset game state in memory
-    bars = 0; totalBars = 0; offlineBars = 0; eraMax = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+    bars = 0; totalBars = 0; offlineBars = 0; eraMax = 0; runBars = 0; prestigeBars = 0; prestigeLevel = 0; plaques = 0; eraBest = 0; totalClicks = 0; clickPower = 1; genMult = 1;
     Object.keys(owned).forEach(k => { owned[k] = 0; });
     boughtUpgrades = new Set(); boughtFashion = new Set();
 
     // 4. Reset game state for fresh start (new user = no existing save)
-    bars = 0; totalBars = 0; offlineBars = 0; eraMax = 0; totalClicks = 0; clickPower = 1; genMult = 1;
+    bars = 0; totalBars = 0; offlineBars = 0; eraMax = 0; runBars = 0; prestigeBars = 0; prestigeLevel = 0; plaques = 0; eraBest = 0; totalClicks = 0; clickPower = 1; genMult = 1;
     Object.keys(owned).forEach(k => { owned[k] = 0; });
     boughtUpgrades = new Set(); boughtFashion = new Set(); albumIdx = 0;
 
