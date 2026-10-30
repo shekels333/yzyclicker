@@ -7138,14 +7138,23 @@ function spawnDove() {
 
 // ─── GAME TICK ───────────────────────────────────────────────────────────────
 
-const HIDDEN_GRACE_MS = 5000;   // background tabs stop earning after this (no offline progress)
+// Time-based tick: earns bps × real elapsed time, so throttled background tabs
+// (timers ~1/s, or ~1/min after 5 min) still earn at full rate. A single gap is
+// capped at MAX_TICK_S so a frozen/slept tab can't deliver an offline-style lump.
+const MAX_TICK_S = 120;
+let lastTickAt = performance.now();
 setInterval(() => {
+  // During an era transition the tick waits; the time is paid out right after (still capped).
   if (paused) return;
-  if (document.hidden && window._yzyHiddenAt && Date.now() - window._yzyHiddenAt > HIDDEN_GRACE_MS) return;
+  const now = performance.now();
+  let dt = (now - lastTickAt) / 1000;
+  lastTickAt = now;
+  if (!(dt > 0)) return;              // clock went backwards / NaN: earn nothing
+  if (dt > MAX_TICK_S) dt = MAX_TICK_S;
   const rate = getBps();
   if (rate > 0) {
-    bars += rate / 20;
-    totalBars += rate / 20;
+    bars += rate * dt;
+    totalBars += rate * dt;
     checkMilestone();
     updateProgression();
     updateCounters();
@@ -9030,12 +9039,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
     }
   })();
 
-  // No offline progress: time away (closed tab, reload, long background) earns nothing.
-  // The game tick also stops generating once the tab has been hidden for a few seconds.
+  // No offline progress: time away (closed tab, reload) earns nothing.
+  // Hidden-but-open tabs keep earning via the time-based tick (gaps capped at MAX_TICK_S).
   document.addEventListener('visibilitychange', () => {
     if (window._yzy_resetting) return;
-    if (document.hidden) { window._yzyHiddenAt = Date.now(); saveGame(true); return; }
-    window._yzyHiddenAt = 0;
+    if (document.hidden) { saveGame(true); return; }
     if (staleTab) resyncFromStorage();
   });
   window.addEventListener('pagehide', () => { if (!window._yzy_resetting) saveGame(true, true); });
