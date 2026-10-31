@@ -147,6 +147,12 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 #ac-still .ac-card{position:relative;width:min(340px,100%);height:190px;padding:20px 18px;border:1px solid #ffd34d;border-radius:14px;background:linear-gradient(160deg,#1a1400,#000 70%);box-shadow:0 0 30px rgba(255,211,77,.25);font-family:var(--mono-font);color:#d9c27a;text-align:center}
 #ac-still .ac-t{font-size:20px;font-weight:900;letter-spacing:2px;color:#ffd34d}
 #ac-still .ac-s{margin-top:6px;font-size:11px;line-height:1.5;opacity:.8}
+#ac-timeout{position:fixed;inset:0;z-index:9650;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.72)}
+#ac-timeout.show{display:flex}
+#ac-timeout .ac-card{width:min(340px,100%);padding:20px 18px;border:1px solid #ffd34d;border-radius:14px;background:linear-gradient(160deg,#1a1400,#000 70%);box-shadow:0 0 30px rgba(255,211,77,.25);font-family:var(--mono-font);color:#d9c27a;text-align:center}
+#ac-timeout .ac-t{font-size:17px;font-weight:900;letter-spacing:1.5px;color:#ffd34d}
+#ac-timeout .ac-cd{margin-top:12px;font-size:34px;font-weight:900;letter-spacing:2px;color:#ffd34d;font-variant-numeric:tabular-nums}
+#ac-timeout .ac-s{margin-top:8px;font-size:11px;line-height:1.5;opacity:.8}
 #ac-still .ac-b{position:absolute;padding:9px 16px;border:0;border-radius:8px;background:linear-gradient(90deg,#ffd34d,#ffb300);color:#1a1200;font-weight:900;letter-spacing:1px;font-size:13px;cursor:pointer;font-family:inherit}
 #ac-pausedtip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9550;padding:6px 12px;border-radius:8px;background:rgba(0,0,0,.78);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.85);font:12px var(--mono-font);letter-spacing:.5px;opacity:0;pointer-events:none;transition:opacity .3s}
 #ac-pausedtip.show{opacity:1}
@@ -1721,6 +1727,7 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
   <canvas id="sand-canvas"></canvas>
   <div id="album-banner"></div>
   <div id="era-unlock-banner"><div id="era-unlock-title">ERA UNLOCKED</div><div id="era-unlock-name"></div><div id="era-unlock-divider"></div><div id="era-unlock-next"></div></div>
+<div id="ac-timeout" role="dialog" aria-modal="true" aria-label="Timed out" data-nosnippet><div class="ac-card"><div class="ac-t">AUTO-CLICKER DETECTED</div><div class="ac-s ac-m">Timed out for 5 min</div><div class="ac-cd">5:00</div><div class="ac-s">Earning is paused. Clicks and passive income resume when the timer ends. Repeats get longer timeouts.</div></div></div>
 <div id="ac-still" role="dialog" aria-modal="true" aria-label="Still there?" data-nosnippet><div class="ac-card"><div class="ac-t">STILL THERE?</div><div class="ac-s">Earning is paused until you tap the button.</div><button class="ac-b" type="button"></button></div></div>
 <div id="ac-pausedtip" data-nosnippet>clicks paused</div>
   <div id="milestone-overlay" data-nosnippet>
@@ -3324,12 +3331,52 @@ const AC = (() => {
   const STILL_STREAK = 200;      // identical coords, no pointer movement…
   const STILL_CV = 0.08;         // …AND fairly regular timing
   const AWAY_MS = 40 * 60 * 1000;
+  // Auto-clicker timeout: mirrors the server rule (yzy_autoclick_timeout migration).
+  const TO_WIN_MS = 30 * 60 * 1000, TO_TRIPS = 24, TO_MINUTES = 12, TO_STEPS = [5, 15, 60];
+  const TO_KEY = 'yzy_ac_timeout';
+  let trips = [];
+  function toLoad() { try { const o = JSON.parse(localStorage.getItem(TO_KEY) || '{}'); return { until: +o.until || 0, hist: Array.isArray(o.hist) ? o.hist.filter(Number.isFinite) : [] }; } catch (e) { return { until: 0, hist: [] }; } }
+  function toSave(o) { try { localStorage.setItem(TO_KEY, JSON.stringify(o)); } catch (e) {} }
+  let toState = toLoad(), toTimer = 0;
+  function timedOut() { return toState.until > Date.now(); }
+  function toRender() {
+    const m = document.getElementById('ac-timeout'); if (!m) return;
+    const left = Math.max(0, toState.until - Date.now());
+    if (left <= 0) { m.classList.remove('show'); clearInterval(toTimer); toTimer = 0; trips = []; ivals = []; botMode = false;
+      if (typeof lastTickAt !== 'undefined') lastTickAt = performance.now(); return; }
+    const mins = Math.max(1, Math.round((toState.len || left) / 60000));
+    m.querySelector('.ac-m').textContent = 'Timed out for ' + mins + ' min';
+    const s = Math.ceil(left / 1000);
+    m.querySelector('.ac-cd').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    m.classList.add('show');
+  }
+  function toShow() { toRender(); if (!toTimer) toTimer = setInterval(toRender, 250); }
+  function startTimeout(untilMs, fromServer) {
+    const t = Date.now();
+    if (untilMs && untilMs <= toState.until) { toShow(); return; }
+    toState.hist = toState.hist.filter(h => t - h < 24 * 3600 * 1000);
+    const mins = TO_STEPS[Math.min(toState.hist.length, TO_STEPS.length - 1)];
+    const until = untilMs || (t + mins * 60000);
+    toState = { until, len: until - t, hist: toState.hist.concat([t]) };
+    toSave(toState);
+    if (!fromServer) flag('timeout');
+    toShow();
+  }
+  function checkTrips(t) {
+    trips.push(t); trips = trips.filter(x => t - x < TO_WIN_MS);
+    if (trips.length < TO_TRIPS) return;
+    const mins = new Set(trips.map(x => Math.floor(x / 60000))).size;
+    if (mins >= TO_MINUTES) startTimeout();
+  }
   const LABELS = ["I'm here", "Still here", "Yep, here", "Keep going", "I'm back", "Continue"];
   let win1s = [], ivals = [], lastClickT = 0, lastX = null, lastY = null, moved = true, still = 0;
-  let botMode = false, flagged = 0, reported = 0, reasons = {};
+  let botMode = false, botRun = 0, flagged = 0, reported = 0, reasons = {}, strongD = 0;
+  const STRONG_CV = 0.035;
   let lastGenuine = Date.now(), halted = false, tipT = 0, lastPX = null, lastPY = null;
   const now = () => performance.now();
   function flag(r) { flagged++; reasons[r] = (reasons[r] || 0) + 1; }
+  // 'strong' = machine-exact timing (CV < STRONG_CV); only these count toward a timeout.
+  function strongTrip() { strongD++; checkTrips(Date.now()); }
   function tip() {
     const el = document.getElementById('ac-pausedtip'); if (!el) return;
     el.classList.add('show'); clearTimeout(tipT); tipT = setTimeout(() => el.classList.remove('show'), 1800);
@@ -3337,7 +3384,7 @@ const AC = (() => {
   function cv(a) { const m = a.reduce((x, y) => x + y, 0) / a.length; if (!(m > 0)) return { m, cv: 0 };
     const v = a.reduce((x, y) => x + (y - m) * (y - m), 0) / a.length; return { m, cv: Math.sqrt(v) / m }; }
   function clickOk(e) {
-    if (halted) return false;
+    if (halted || timedOut()) return false;
     if (!e || !e.isTrusted) { flag('untrusted'); tip(); return false; }
     const t = now();
     if (lastClickT) { ivals.push(t - lastClickT); if (ivals.length > WIN) ivals.shift(); }
@@ -3345,12 +3392,15 @@ const AC = (() => {
     const x = e.clientX, y = e.clientY;
     if (!moved && x === lastX && y === lastY) still++; else still = 0;
     lastX = x; lastY = y; moved = false;
-    let bot = false;
+    let bot = false, strong = false;
     if (ivals.length >= WIN) {
       const st = cv(ivals);
       if (st.m < MAX_MEAN_MS && (st.cv < CV_MIN || (still >= STILL_STREAK && st.cv < STILL_CV))) bot = true;
+      strong = bot && st.cv < STRONG_CV;
     }
-    if (bot) { if (!botMode) flag(still >= STILL_STREAK ? 'still' : 'regular'); botMode = true; tip(); return false; }
+    if (bot) { if (!botMode) { botRun = 0; flag(still >= STILL_STREAK ? 'still' : 'regular'); if (strong) strongTrip(); }
+      else if (strong && ++botRun % 200 === 0) { flag('regular'); strongTrip(); } // a non-stop machine stream keeps counting
+      botMode = true; tip(); return false; }
     botMode = false;
     while (win1s.length && t - win1s[0] > 1000) win1s.shift();
     if (win1s.length >= CPS_MAX) return false;
@@ -3390,12 +3440,16 @@ const AC = (() => {
       });
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+    const goTo = () => { if (timedOut()) toShow(); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', goTo); else goTo();
     document.addEventListener('visibilitychange', () => { if (!document.hidden && away()) showStill(); });
   })();
-  function takeReport() { const d = flagged - reported; if (d <= 0) return null; reported = flagged; return { flagged: d, reasons: Object.assign({}, reasons) }; }
-  return { clickOk, away, deadline, showStill, isHalted: () => halted, flagged: () => flagged, takeReport,
-    _t: { setLastGenuine: v => { lastGenuine = v; }, reset: () => { win1s = []; ivals = []; lastClickT = 0; still = 0; botMode = false; } },
-    TH: { CPS_MAX, WIN, CV_MIN, MAX_MEAN_MS, STILL_STREAK, STILL_CV, AWAY_MS } };
+  function takeReport() { const d = flagged - reported; if (d <= 0) return null; reported = flagged;
+    const r = Object.assign({}, reasons); if (strongD) { r.strong_d = strongD; strongD = 0; } return { flagged: d, reasons: r }; }
+  return { clickOk, away, deadline, showStill, isHalted: () => halted || timedOut(), timedOut, startTimeout, timeoutUntil: () => toState.until, flagged: () => flagged, takeReport,
+    _t: { setLastGenuine: v => { lastGenuine = v; }, reset: () => { win1s = []; ivals = []; lastClickT = 0; still = 0; botMode = false; },
+      clearTimeout: () => { toState = { until: 0, hist: [] }; toSave(toState); trips = []; toRender(); }, trips: () => trips.length },
+    TH: { STRONG_CV, TO_WIN_MS, TO_TRIPS, TO_MINUTES, TO_STEPS, CPS_MAX, WIN, CV_MIN, MAX_MEAN_MS, STILL_STREAK, STILL_CV, AWAY_MS } };
 })();
 window.yzyAC = AC;
 
@@ -8497,6 +8551,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const r = await ownedRpc('yzy_lb_submit', username, {
         p_total_bars: cappedTotal(), p_total_clicks: Math.floor(totalClicks),
         p_era: currentEra, p_twitter: twitterHandle || null, p_prestige: prestigeLevel });
+      if (r && r.reason === 'timeout') { AC.startTimeout(Date.parse(r.until) || 0, true); if (!silent) setSubmitStatus("Timed out: auto-clicker detected"); return; }
       if (!r || !r.ok) { if (!silent) setSubmitStatus(r && r.reason === 'taken' ? "Name owned by another player" : "Submit failed"); return; }
       setSubmitStatus("✓ Score submitted");
       checkContest();
