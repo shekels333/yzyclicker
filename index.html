@@ -33,6 +33,65 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 #star-btn.ready.pulse{animation:starPulse 1.4s ease-in-out infinite}
 @keyframes starPulse{0%,100%{box-shadow:0 0 6px rgba(255,211,77,.5)}50%{box-shadow:0 0 18px rgba(255,211,77,.95)}}
 @media (prefers-reduced-motion:reduce){#star-btn.ready{animation:none}}
+
+/* ── Cosmetics: name effects (whitelisted classes only) ── */
+.nfx-cream{color:#f3e5c0!important}
+.nfx-gold{color:#ffd34d!important;text-shadow:0 0 6px rgba(255,211,77,.45)}
+.nfx-silver{color:#e3e8f0!important;text-shadow:0 0 5px rgba(200,210,225,.5)}
+.nfx-red{color:#ff2a1a!important;text-shadow:0 0 6px rgba(255,42,26,.45)}
+.nfx-sunset,.nfx-shimmer,.nfx-rainbow{-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent!important}
+.nfx-sunset{background-image:linear-gradient(90deg,#ff9a3c,#ff3c6e,#b44cff)}
+.nfx-glow{color:#fff!important;text-shadow:0 0 6px #00ffcc,0 0 14px #00ffcc;animation:nfxGlow 1.8s ease-in-out infinite alternate}
+.nfx-shimmer{background-image:linear-gradient(100deg,#b8860b 20%,#fff6c8 40%,#ffd34d 50%,#b8860b 70%);background-size:250% 100%;animation:nfxShim 2.4s linear infinite}
+.nfx-rainbow{background-image:linear-gradient(90deg,#ff3c3c,#ffb33c,#fff23c,#3cff7a,#3cc8ff,#9a3cff,#ff3c3c);background-size:200% 100%;animation:nfxShim 3s linear infinite}
+.nfx-glitch{position:relative;color:#fff!important;text-shadow:2px 0 #ff003c,-2px 0 #00e5ff;animation:nfxGlitch 2.2s steps(1) infinite}
+@keyframes nfxGlow{from{text-shadow:0 0 4px #00ffcc}to{text-shadow:0 0 10px #00ffcc,0 0 20px #00ffcc}}
+@keyframes nfxShim{from{background-position:100% 0}to{background-position:-100% 0}}
+@keyframes nfxGlitch{0%,86%,100%{text-shadow:2px 0 #ff003c,-2px 0 #00e5ff;transform:none}88%{text-shadow:-3px 0 #ff003c,3px 0 #00e5ff;transform:translateX(1px)}92%{text-shadow:3px 1px #ff003c,-3px -1px #00e5ff;transform:translateX(-1px)}}
+html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,html.yzy-lite .nfx-glitch,html.yzy-lite .pfr-anim{animation:none!important}
+@media (prefers-reduced-motion:reduce){.nfx-glow,.nfx-shimmer,.nfx-rainbow,.nfx-glitch,.pfr-anim{animation:none!important}}
+/* ── Profile card frames ── */
+.pfr{border:2px solid rgba(255,255,255,.25)}
+.pfr-concrete{border:3px solid #8a8a85;box-shadow:inset 0 0 0 1px #555}
+.pfr-gold{border:3px solid #ffd34d;box-shadow:0 0 18px rgba(255,211,77,.45),inset 0 0 12px rgba(255,211,77,.2)}
+.pfr-808{border:3px solid #e82200;box-shadow:0 0 16px rgba(232,34,0,.5),inset 0 0 0 2px #1a0000,inset 0 0 0 4px rgba(232,34,0,.5)}
+.pfr-mbdtf{border:4px solid #f0c830;outline:3px solid #b00010;outline-offset:-10px;box-shadow:0 0 20px rgba(240,200,48,.4)}
+.pfr-yeezus{border:3px solid #fff;box-shadow:4px 4px 0 #e8160a,-4px -4px 0 #00e5ff;}
+.pfr-yeezus.pfr-anim{animation:pfrYz 2.4s steps(1) infinite}
+.pfr-trillion{border:4px solid transparent;background-image:linear-gradient(#0b0900,#0b0900),linear-gradient(120deg,#ffe866,#ff9a3c,#fff6c8,#ffd34d);background-origin:border-box;background-clip:padding-box,border-box;box-shadow:0 0 24px rgba(255,232,102,.6)}
+.pfr-trillion.pfr-anim{animation:pfrTb 2s ease-in-out infinite alternate}
+@keyframes pfrYz{0%,90%,100%{box-shadow:4px 4px 0 #e8160a,-4px -4px 0 #00e5ff}93%{box-shadow:-4px 4px 0 #e8160a,4px -4px 0 #00e5ff}}
+@keyframes pfrTb{from{box-shadow:0 0 12px rgba(255,232,102,.4)}to{box-shadow:0 0 30px rgba(255,232,102,.85)}}
+/* ── Shop (inside ★ panel) ── */
+.yzy-tk{font-size:.75em;font-weight:900;letter-spacing:.5px;padding:0 4px;border:1px solid currentColor;border-radius:4px;margin-right:2px}
+#cos-shop{margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,211,77,.25);font-family:var(--mono-font);color:#d9c27a;font-size:12px}
+#cos-shop .cs-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+#cos-shop .cs-title{font-weight:900;letter-spacing:2px;color:#ffd34d;font-size:14px}
+#cos-shop .cs-bal{font-weight:800;color:#fff}
+#cos-shop .cs-tabs{display:flex;gap:6px;margin-bottom:8px}
+#cos-shop .cs-tabs button{flex:1;padding:6px;border:1px solid rgba(255,211,77,.35);border-radius:6px;background:transparent;color:#d9c27a;font-family:inherit;font-size:11px;letter-spacing:1px;cursor:pointer}
+#cos-shop .cs-tabs button.on{background:#ffd34d;color:#1a1200;font-weight:900}
+#cos-shop .cs-item{display:flex;align-items:center;gap:8px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.03)}
+#cos-shop .cs-item.eq{border-color:#00ffcc88;background:rgba(0,255,204,.06)}
+#cos-shop .cs-prev{flex:1;min-width:0;font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ddd}
+#cos-shop .cs-sw{width:30px;height:22px;border-radius:5px;flex-shrink:0;background:#0b0900}
+#cos-shop .cs-lbl{font-size:10px;opacity:.7;display:block;font-weight:400;letter-spacing:1px;color:#bba}
+#cos-shop .cs-btn{flex-shrink:0;min-width:74px;padding:6px 8px;border:0;border-radius:6px;font-family:inherit;font-weight:900;font-size:11px;cursor:pointer;background:#ffd34d;color:#1a1200}
+#cos-shop .cs-btn.eq{background:#00ffcc;color:#002a22}
+#cos-shop .cs-btn.own{background:transparent;border:1px solid #00ffcc;color:#00ffcc}
+#cos-shop .cs-btn:disabled{background:rgba(255,255,255,.08);color:#776;cursor:not-allowed}
+#cos-shop .cs-msg{min-height:14px;margin-top:4px;font-size:11px;color:#ff8a7a}
+#cos-shop .cs-note{font-size:10px;opacity:.65;margin-bottom:8px;line-height:1.4}
+/* ── Profile card modal ── */
+#pcard-modal{position:fixed;inset:0;z-index:9100;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.72)}
+#pcard-modal.show{display:flex}
+#pcard-modal .pcd{position:relative;width:min(340px,100%);padding:22px 18px 18px;border-radius:14px;background:linear-gradient(160deg,#151208,#000 75%);font-family:var(--mono-font);color:#ddd;text-align:center}
+#pcard-modal .pcd-x{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:#000;color:#fff;cursor:pointer}
+#pcard-modal .pcd-name{font-size:24px;font-weight:900;letter-spacing:1px;margin:6px 0 4px;word-break:break-all}
+#pcard-modal .pcd-star{color:#ffd34d;font-weight:800}
+#pcard-modal .pcd-row{display:flex;justify-content:space-between;padding:6px 2px;border-top:1px solid rgba(255,255,255,.08);font-size:12px}
+#pcard-modal .pcd-row span:first-child{opacity:.6;letter-spacing:1px}
+#pcard-modal .pcd-x-link{display:inline-block;margin-top:10px;color:#00ffcc;font-weight:800;text-decoration:none}
 #prestige-btn{margin-top:4px;}
 #prestige-btn{width:100%;padding:9px;border:0;border-radius:8px;background:linear-gradient(90deg,#ffd34d,#ffb300);color:#1a1200;font-weight:900;letter-spacing:1px;font-size:13px;cursor:pointer}
 .lb-prestige{color:#ffd34d;font-size:.85em}
@@ -1737,6 +1796,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
       <div class="pp-card"><button class="pp-x" type="button" aria-label="Close">✕</button>
         <div class="pp-title">★ PRESTIGE</div>
         <div id="prestige-card"></div>
+        <div id="cos-shop"></div>
       </div>
     </div>
 
@@ -7332,6 +7392,123 @@ window.openPrestigePanel = openPrestigePanel; window.closePrestigePanel = closeP
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go); else go();
 })();
 window.updatePrestigeCard = updatePrestigeCard;
+
+// ── Cosmetics (name effects + profile frames), bought with YzY Tokens earned from prestige ──
+(function () {
+  const FX = [
+    { id: 'fx_cream',   cls: 'nfx-cream',   name: 'Cream',      price: 0 },
+    { id: 'fx_gold',    cls: 'nfx-gold',    name: 'Gold',       price: 1 },
+    { id: 'fx_silver',  cls: 'nfx-silver',  name: 'Silver',     price: 1 },
+    { id: 'fx_red',     cls: 'nfx-red',     name: 'Red October',price: 2 },
+    { id: 'fx_sunset',  cls: 'nfx-sunset',  name: 'Sunset',     price: 3 },
+    { id: 'fx_glow',    cls: 'nfx-glow',    name: 'Glow',       price: 4, anim: 1 },
+    { id: 'fx_shimmer', cls: 'nfx-shimmer', name: 'Gold Shimmer', price: 6, anim: 1 },
+    { id: 'fx_glitch',  cls: 'nfx-glitch',  name: 'Yeezus Glitch', price: 8, anim: 1 },
+    { id: 'fx_rainbow', cls: 'nfx-rainbow', name: 'Rainbow',    price: 12, anim: 1 } ];
+  const FR = [
+    { id: 'fr_concrete', cls: 'pfr-concrete', name: 'Concrete',     price: 0 },
+    { id: 'fr_gold',     cls: 'pfr-gold',     name: 'Gold Plaque',  price: 2 },
+    { id: 'fr_808',      cls: 'pfr-808',      name: '808s Red',     price: 4 },
+    { id: 'fr_mbdtf',    cls: 'pfr-mbdtf',    name: 'MBDTF',        price: 6 },
+    { id: 'fr_yeezus',   cls: 'pfr-yeezus',   name: 'Yeezus',       price: 9, anim: 1 },
+    { id: 'fr_trillion', cls: 'pfr-trillion', name: 'Trillionbear', price: 15, anim: 1 } ];
+  const BY = {}; FX.forEach(x => BY[x.id] = Object.assign({ kind: 'fx' }, x)); FR.forEach(x => BY[x.id] = Object.assign({ kind: 'frame' }, x));
+  const PER_PRESTIGE = 1;
+  const state = { loaded: false, balance: 0, earned: 0, owned: [], name_fx: null, frame: null };
+  let tab = 'fx', busy = false, msg = '';
+  const fxClass = id => (BY[id] && BY[id].kind === 'fx') ? BY[id].cls : '';
+  const frClass = id => (BY[id] && BY[id].kind === 'frame') ? 'pfr ' + BY[id].cls + (BY[id].anim ? ' pfr-anim' : '') : 'pfr';
+  const me = () => { try { return (localStorage.getItem('yzy_username') || '').toUpperCase(); } catch (e) { return ''; } };
+  function syncLite() { document.documentElement.classList.toggle('yzy-lite', typeof liteMode !== 'undefined' && !!liteMode); }
+  syncLite(); setInterval(syncLite, 1000);
+  function applyState(r) {
+    if (!r || !r.ok) return false;
+    state.loaded = true; state.balance = Math.max(0, Math.floor(Number(r.balance) || 0)); state.earned = Math.floor(Number(r.earned) || 0);
+    state.owned = Array.isArray(r.owned) ? r.owned.filter(id => BY[id]) : [];
+    state.name_fx = BY[r.name_fx] ? r.name_fx : null; state.frame = BY[r.frame] ? r.frame : null;
+    return true;
+  }
+  async function rpc(fn, args) {
+    const u = me(); const sec = window.yzyGetSecret && window.yzyGetSecret(u, false);
+    if (!u || !sec || !window.sbFetch) return { ok: false, reason: 'no-key' };
+    try {
+      return await window.sbFetch('rpc/' + fn, { method: 'POST', prefer: 'return=representation',
+        body: JSON.stringify(Object.assign({ p_username: u, p_secret: sec }, args || {})) });
+    } catch (e) { return { ok: false, reason: 'net' }; }
+  }
+  async function load() { const r = await rpc('yzy_cosmetics_get'); applyState(r); if (!r || !r.ok) msg = state.loaded ? '' : 'Shop needs a ¥ Board name (and a connection).'; render(); }
+  const owns = id => BY[id] && (BY[id].price === 0 || state.owned.includes(id));
+  async function act(id) {
+    if (busy) return; const it = BY[id]; if (!it) return;
+    const equipped = (it.kind === 'fx' ? state.name_fx : state.frame) === id;
+    busy = true; msg = ''; render();
+    let r;
+    if (equipped) r = await rpc('yzy_cosmetic_equip', { p_kind: it.kind, p_item: null });
+    else if (owns(id)) r = await rpc('yzy_cosmetic_equip', { p_kind: it.kind, p_item: id });
+    else {
+      if (state.balance < it.price) { busy = false; msg = 'Not enough YzY Tokens — prestige to earn more.'; render(); return; }
+      r = await rpc('yzy_cosmetic_buy', { p_item: id });
+      if (r && r.ok) { applyState(r); r = await rpc('yzy_cosmetic_equip', { p_kind: it.kind, p_item: id }); }
+    }
+    busy = false;
+    if (!applyState(r)) msg = r && r.reason === 'funds' ? 'Not enough YzY Tokens — prestige to earn more.' : r && r.reason === 'no-board' ? 'Submit a score to the ¥ Board first.' : 'Something went wrong — try again.';
+    render();
+    if (window.yzyRenderBoard) window.yzyRenderBoard();
+  }
+  function render() {
+    const el = document.getElementById('cos-shop'); if (!el) return;
+    const items = tab === 'fx' ? FX : FR; const nm = me() || 'YOUR NAME';
+    let h = `<div class="cs-head"><span class="cs-title">SHOP</span><span class="cs-bal" id="cs-bal"><b class="yzy-tk">YzY</b> ${state.balance} YzY Token${state.balance===1?'':'s'}</span></div>` +
+      `<div class="cs-note">Earn ${PER_PRESTIGE} YzY Token per prestige level (★). Plaques are never spent. Everyone sees your look on the ¥ Board.</div>` +
+      `<div class="cs-tabs"><button type="button" data-tab="fx" class="${tab === 'fx' ? 'on' : ''}">NAME EFFECTS</button><button type="button" data-tab="frame" class="${tab === 'frame' ? 'on' : ''}">CARD FRAMES</button></div>`;
+    items.forEach(it => {
+      const eq = (tab === 'fx' ? state.name_fx : state.frame) === it.id, own = owns(it.id);
+      const lbl = eq ? 'EQUIPPED' : own ? 'EQUIP' : '<b class="yzy-tk">YzY</b> ' + it.price;
+      const cls = eq ? 'cs-btn eq' : own ? 'cs-btn own' : 'cs-btn';
+      const dis = busy || !state.loaded || (!own && state.balance < it.price);
+      const prev = tab === 'fx' ? `<span class="cs-prev"><span class="${it.cls}" data-x>${''}</span><span class="cs-lbl">${it.name}${it.price === 0 ? ' · FREE' : ''}</span></span>`
+        : `<span class="cs-sw ${frClass(it.id)}"></span><span class="cs-prev">${it.name}<span class="cs-lbl">${it.price === 0 ? 'FREE' : 'FRAME'}</span></span>`;
+      h += `<div class="cs-item${eq ? ' eq' : ''}" data-id="${it.id}">${prev}<button type="button" class="${cls}" data-id="${it.id}"${dis ? ' disabled' : ''}>${eq ? 'EQUIPPED ✓' : lbl}</button></div>`;
+    });
+    h += `<div class="cs-msg" id="cs-msg">${msg}</div>`;
+    el.innerHTML = h;
+    el.querySelectorAll('[data-x]').forEach(n => { n.textContent = nm; n.dataset.text = nm; });
+  }
+  function wire() {
+    const el = document.getElementById('cos-shop'); if (!el || el._w) return; el._w = 1;
+    el.addEventListener('click', e => {
+      const t = e.target.closest('[data-tab]'); if (t) { tab = t.dataset.tab; msg = ''; render(); return; }
+      const b = e.target.closest('button.cs-btn'); if (b && !b.disabled) act(b.dataset.id);
+      else if (b && b.disabled && BY[b.dataset.id] && !owns(b.dataset.id) && state.loaded) { msg = 'Not enough YzY Tokens — prestige to earn more.'; render(); }
+    });
+    const sb = document.getElementById('star-btn'); if (sb) sb.addEventListener('click', () => { render(); load(); });
+    render();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
+  // ── Profile card ──
+  function openProfile(row, isMe) {
+    let m = document.getElementById('pcard-modal');
+    if (!m) {
+      m = document.createElement('div'); m.id = 'pcard-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
+      m.innerHTML = '<div class="pcd"><button type="button" class="pcd-x" aria-label="Close">✕</button><div class="pcd-name"><span></span></div><div class="pcd-star"></div><div class="pcd-rows"></div><a class="pcd-x-link" target="_blank" rel="noopener"></a></div>';
+      m.addEventListener('click', e => { if (e.target === m || e.target.closest('.pcd-x')) m.classList.remove('show'); });
+      document.body.appendChild(m);
+    }
+    const fx = isMe && state.loaded ? state.name_fx : row.name_fx, fr = isMe && state.loaded ? state.frame : row.frame;
+    const card = m.querySelector('.pcd'); card.className = 'pcd ' + frClass(fr);
+    const n = m.querySelector('.pcd-name span'); n.textContent = String(row.username || 'ANON').toUpperCase(); n.className = fxClass(fx); n.dataset.text = n.textContent;
+    const pv = Math.min(500, Math.floor(Number(row.prestige) || 0));
+    m.querySelector('.pcd-star').textContent = '★' + pv + (pv === 1 ? ' prestige' : ' prestiges');
+    const rows = m.querySelector('.pcd-rows'); rows.innerHTML = '';
+    [['ERA', row.era || '—'], ['LIFETIME ¥', '¥' + (typeof formatNum === 'function' ? formatNum(Number(row.total_bars) || 0) : row.total_bars)], ['CLICKS', typeof formatNum === 'function' ? formatNum(Number(row.total_clicks) || 0) : row.total_clicks]]
+      .forEach(([k, v]) => { const d = document.createElement('div'); d.className = 'pcd-row'; const a = document.createElement('span'); a.textContent = k; const b = document.createElement('span'); b.textContent = v; d.appendChild(a); d.appendChild(b); rows.appendChild(d); });
+    const xl = m.querySelector('.pcd-x-link'); const h = String(row.twitter_handle || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 15);
+    if (h) { xl.style.display = ''; xl.href = 'https://x.com/' + h; xl.textContent = '@' + h + ' on X ↗'; } else xl.style.display = 'none';
+    m.classList.add('show');
+  }
+  window.yzyCos = { state, fxClass, frClass, openProfile, load, render, catalog: BY };
+  setTimeout(() => { if (me()) load(); }, 3000);
+})();
 function promptPrestige() {
   if (!prestigeReady() || paused) return;
   const g = prestigeGain(), np = plaques + g;
@@ -8138,16 +8315,16 @@ document.getElementById("shop").addEventListener("click", (e) => {
     const sortCol = lbSort === "bars" ? "total_bars" : "total_clicks";
     try {
       if (lbMode === "week") {
-        const w = await sbFetch(
-          "yzy_weekly_board?select=username,score,clicks,current_era,twitter_handle,prestige&order=" + (lbSort === "bars" ? "score" : "clicks") + ".desc&limit=50"
-        );
-        lbData = (w || []).map(r => ({ username: r.username, total_bars: Number(r.score), total_clicks: Number(r.clicks), era: r.current_era, twitter_handle: r.twitter_handle, prestige: r.prestige }));
+        const wq = c => "yzy_weekly_board?select=username,score,clicks,current_era,twitter_handle,prestige" + c + "&order=" + (lbSort === "bars" ? "score" : "clicks") + ".desc&limit=50";
+        const w = await sbFetch(wq(",name_fx,frame")).catch(() => sbFetch(wq("")));
+        lbData = (w || []).map(r => ({ username: r.username, total_bars: Number(r.score), total_clicks: Number(r.clicks), era: r.current_era, twitter_handle: r.twitter_handle, prestige: r.prestige, name_fx: r.name_fx, frame: r.frame }));
         throw "done";
       }
-      const rows = await sbFetch(
-        TABLE + "?select=username,total_bars,total_clicks,era,twitter_handle,prestige&order=" + sortCol + ".desc&limit=50",
+      const aq = c => sbFetch(
+        TABLE + "?select=username,total_bars,total_clicks,era,twitter_handle,prestige" + c + "&order=" + sortCol + ".desc&limit=50",
         { headers: { "Range-Unit": "items", "Range": "0-49" } }
       );
+      const rows = await aq(",name_fx,frame").catch(() => aq(""));
       lbData = (rows || []).map(r => Object.assign({}, r, { total_bars: Number(r.total_bars), total_clicks: Number(r.total_clicks) }));
     } catch(e) {
       if (e !== "done") lbData = [];
@@ -8288,7 +8465,14 @@ document.getElementById("shop").addEventListener("click", (e) => {
       const nameEl = document.createElement("div");
       nameEl.className = "lb-name";
       nameEl.style.color = isMe ? T.accent : T.primary;
-      nameEl.textContent = (row.username || "ANON").toUpperCase();
+      const nmSpan = document.createElement("span");
+      nmSpan.textContent = (row.username || "ANON").toUpperCase();
+      const fxId = isMe && window.yzyCos && yzyCos.state.loaded ? yzyCos.state.name_fx : row.name_fx;
+      const fxCls = window.yzyCos ? yzyCos.fxClass(fxId) : "";
+      if (fxCls) { nmSpan.className = fxCls; nmSpan.dataset.text = nmSpan.textContent; }
+      nameEl.appendChild(nmSpan);
+      div.style.cursor = "pointer";
+      div.addEventListener("click", () => window.yzyCos && yzyCos.openProfile(row, isMe));
       const pv = Math.floor(Number(row.prestige) || 0);
       if (pv > 0) { const b = document.createElement("span"); b.className = "lb-prestige"; b.textContent = " ★" + Math.min(pv, 500); b.title = "Prestige " + pv; nameEl.appendChild(b); }
       if (isMe) nameEl.appendChild(document.createTextNode(" ◀"));
@@ -8329,6 +8513,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // ── Auto-submit hooks ──
   // Called by save system on every autosave + manual save
   window.lbAutoSubmit = function() { submitScore(true); };
+  window.yzyRenderBoard = function() { try { renderLbList(); } catch (e) {} };
 
   // ── Rank pause notice: explains the clicks-based board rules (rules unchanged) ──
   function rankClicksNeeded() {
