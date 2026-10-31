@@ -133,6 +133,14 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 .pcd-row{display:flex;justify-content:space-between;padding:6px 2px;border-top:1px solid rgba(255,255,255,.08);font-size:12px}
 .pcd-row span:first-child{opacity:.6;letter-spacing:1px}
 .pcd-x-link{display:inline-block;margin-top:10px;color:#00ffcc;font-weight:800;text-decoration:none}
+#ac-still{position:fixed;inset:0;z-index:9600;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.72)}
+#ac-still.show{display:flex}
+#ac-still .ac-card{position:relative;width:min(340px,100%);height:190px;padding:20px 18px;border:1px solid #ffd34d;border-radius:14px;background:linear-gradient(160deg,#1a1400,#000 70%);box-shadow:0 0 30px rgba(255,211,77,.25);font-family:var(--mono-font);color:#d9c27a;text-align:center}
+#ac-still .ac-t{font-size:20px;font-weight:900;letter-spacing:2px;color:#ffd34d}
+#ac-still .ac-s{margin-top:6px;font-size:11px;line-height:1.5;opacity:.8}
+#ac-still .ac-b{position:absolute;padding:9px 16px;border:0;border-radius:8px;background:linear-gradient(90deg,#ffd34d,#ffb300);color:#1a1200;font-weight:900;letter-spacing:1px;font-size:13px;cursor:pointer;font-family:inherit}
+#ac-pausedtip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9550;padding:6px 12px;border-radius:8px;background:rgba(0,0,0,.78);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.85);font:12px var(--mono-font);letter-spacing:.5px;opacity:0;pointer-events:none;transition:opacity .3s}
+#ac-pausedtip.show{opacity:1}
 #prestige-btn{margin-top:4px;}
 #prestige-btn{width:100%;padding:9px;border:0;border-radius:8px;background:linear-gradient(90deg,#ffd34d,#ffb300);color:#1a1200;font-weight:900;letter-spacing:1px;font-size:13px;cursor:pointer}
 .lb-prestige{color:#ffd34d;font-size:.85em}
@@ -1695,6 +1703,8 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
   <canvas id="sand-canvas"></canvas>
   <div id="album-banner"></div>
   <div id="era-unlock-banner"><div id="era-unlock-title">ERA UNLOCKED</div><div id="era-unlock-name"></div><div id="era-unlock-divider"></div><div id="era-unlock-next"></div></div>
+<div id="ac-still" role="dialog" aria-modal="true" aria-label="Still there?" data-nosnippet><div class="ac-card"><div class="ac-t">STILL THERE?</div><div class="ac-s">Earning is paused until you tap the button.</div><button class="ac-b" type="button"></button></div></div>
+<div id="ac-pausedtip" data-nosnippet>clicks paused</div>
   <div id="milestone-overlay" data-nosnippet>
     <div id="milestone-inner">
       <div id="milestone-number"></div>
@@ -3288,10 +3298,96 @@ function buyFashion(item) {
   setTimeout(() => { renderShop(); updateCounters(); }, 120);
 }
 
+// ─── ANTI-BOT ────────────────────────────────────────────────────────────────
+// Client-side guard against auto-clickers / 24/7 bots. Tuned so jittery human spam (8–15 cps) never trips.
+const AC = (() => {
+  const CPS_MAX = 20;            // clicks credited per sliding 1s window
+  const WIN = 40;                // intervals analysed
+  const CV_MIN = 0.06;           // below this the timing is machine-regular
+  const MAX_MEAN_MS = 350;       // only judge sustained streams (≥ ~3 cps)
+  const STILL_STREAK = 200;      // identical coords, no pointer movement…
+  const STILL_CV = 0.08;         // …AND fairly regular timing
+  const AWAY_MS = 40 * 60 * 1000;
+  const LABELS = ["I'm here", "Still here", "Yep, here", "Keep going", "I'm back", "Continue"];
+  let win1s = [], ivals = [], lastClickT = 0, lastX = null, lastY = null, moved = true, still = 0;
+  let botMode = false, flagged = 0, reported = 0, reasons = {};
+  let lastGenuine = Date.now(), halted = false, tipT = 0, lastPX = null, lastPY = null;
+  const now = () => performance.now();
+  function flag(r) { flagged++; reasons[r] = (reasons[r] || 0) + 1; }
+  function tip() {
+    const el = document.getElementById('ac-pausedtip'); if (!el) return;
+    el.classList.add('show'); clearTimeout(tipT); tipT = setTimeout(() => el.classList.remove('show'), 1800);
+  }
+  function cv(a) { const m = a.reduce((x, y) => x + y, 0) / a.length; if (!(m > 0)) return { m, cv: 0 };
+    const v = a.reduce((x, y) => x + (y - m) * (y - m), 0) / a.length; return { m, cv: Math.sqrt(v) / m }; }
+  function clickOk(e) {
+    if (halted) return false;
+    if (!e || !e.isTrusted) { flag('untrusted'); tip(); return false; }
+    const t = now();
+    if (lastClickT) { ivals.push(t - lastClickT); if (ivals.length > WIN) ivals.shift(); }
+    lastClickT = t;
+    const x = e.clientX, y = e.clientY;
+    if (!moved && x === lastX && y === lastY) still++; else still = 0;
+    lastX = x; lastY = y; moved = false;
+    let bot = false;
+    if (ivals.length >= WIN) {
+      const st = cv(ivals);
+      if (st.m < MAX_MEAN_MS && (st.cv < CV_MIN || (still >= STILL_STREAK && st.cv < STILL_CV))) bot = true;
+    }
+    if (bot) { if (!botMode) flag(still >= STILL_STREAK ? 'still' : 'regular'); botMode = true; tip(); return false; }
+    botMode = false;
+    while (win1s.length && t - win1s[0] > 1000) win1s.shift();
+    if (win1s.length >= CPS_MAX) return false;
+    win1s.push(t);
+    return true;
+  }
+  function genuine(e) {
+    if (!e.isTrusted) return;
+    if (e.type === 'pointermove' || e.type === 'mousemove') { moved = true; lastGenuine = Date.now(); return; }
+    if (e.type === 'pointerdown' || e.type === 'touchstart') {
+      const p = e.touches ? e.touches[0] : e; const x = p && p.clientX, y = p && p.clientY;
+      const onBtn = e.target && e.target.closest && e.target.closest('#click-wrap');
+      const same = lastPX !== null && Math.abs(x - lastPX) < 3 && Math.abs(y - lastPY) < 3;
+      lastPX = x; lastPY = y;
+      if (onBtn && same) return;
+      moved = true;
+    }
+    lastGenuine = Date.now();
+  }
+  ['pointermove','mousemove','pointerdown','touchstart','keydown','wheel'].forEach(ev => window.addEventListener(ev, genuine, { capture: true, passive: true }));
+  function away() { return Date.now() - lastGenuine > AWAY_MS; }
+  function deadline() { return lastGenuine + AWAY_MS; }
+  function showStill() {
+    if (halted) return; halted = true;
+    const m = document.getElementById('ac-still'); if (!m) return;
+    const b = m.querySelector('.ac-b'); b.textContent = LABELS[Math.floor(Math.random() * LABELS.length)];
+    b.style.left = (8 + Math.random() * 50) + '%'; b.style.top = (88 + Math.random() * 50) + 'px';
+    m.classList.add('show');
+  }
+  (function wire() {
+    const go = () => {
+      const m = document.getElementById('ac-still'); if (!m) return;
+      m.querySelector('.ac-b').addEventListener('click', e => {
+        if (!e.isTrusted) return;
+        lastGenuine = Date.now(); halted = false; m.classList.remove('show');
+        if (typeof lastTickAt !== 'undefined') lastTickAt = performance.now();
+      });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && away()) showStill(); });
+  })();
+  function takeReport() { const d = flagged - reported; if (d <= 0) return null; reported = flagged; return { flagged: d, reasons: Object.assign({}, reasons) }; }
+  return { clickOk, away, deadline, showStill, isHalted: () => halted, flagged: () => flagged, takeReport,
+    _t: { setLastGenuine: v => { lastGenuine = v; }, reset: () => { win1s = []; ivals = []; lastClickT = 0; still = 0; botMode = false; } },
+    TH: { CPS_MAX, WIN, CV_MIN, MAX_MEAN_MS, STILL_STREAK, STILL_CV, AWAY_MS } };
+})();
+window.yzyAC = AC;
+
 // ─── CLICK ───────────────────────────────────────────────────────────────────
 
 document.getElementById("click-wrap").addEventListener("click", (e) => {
   if (paused) return;
+  if (!AC.clickOk(e)) return;
   window.yzySfx && yzySfx.play('click');
   bars += clickPower;
   totalClicks++;
@@ -7363,6 +7459,12 @@ setInterval(() => {
   lastTickAt = now;
   if (!(dt > 0)) return;              // clock went backwards / NaN: earn nothing
   if (dt > MAX_TICK_S) dt = MAX_TICK_S;
+  if (AC.isHalted()) return;
+  if (AC.away()) {                    // no genuine input for 40 min: pay up to the deadline, then halt
+    const allowed = Math.max(0, (AC.deadline() - (Date.now() - dt * 1000)) / 1000);
+    dt = Math.min(dt, allowed);
+    AC.showStill();
+  }
   const rate = getBps();
   if (rate > 0) {
     bars += rate * dt;
@@ -8366,6 +8468,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
     }
 
     try {
+      { const rep = AC.takeReport(); if (rep) ownedRpc('yzy_flag_report', username, { p_flagged: rep.flagged, p_details: rep.reasons }).catch(() => {}); }
       const r = await ownedRpc('yzy_lb_submit', username, {
         p_total_bars: cappedTotal(), p_total_clicks: Math.floor(totalClicks),
         p_era: currentEra, p_twitter: twitterHandle || null, p_prestige: prestigeLevel });
