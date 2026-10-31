@@ -12,11 +12,28 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 @media (hover:hover){button:not(:disabled):hover{filter:brightness(1.12)}}
 #lb-week-reset{font-family:'Space Mono',monospace!important;font-size:11px;letter-spacing:.5px;font-weight:700}
 #lb-rank-note,#rank-toast{font-family:'Space Mono',monospace}
-#prestige-card{margin:10px 16px 0;padding:8px 10px;border:1px solid rgba(255,211,77,.25);border-radius:10px;background:rgba(255,211,77,.05);font-size:11px;letter-spacing:.5px;color:#d9c27a}
-#prestige-card[data-state=ready]{border-color:#ffd34d;background:rgba(255,211,77,.12);box-shadow:0 0 14px rgba(255,211,77,.25)}
-#prestige-card .pc-bar{height:3px;margin-top:5px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
-#prestige-card .pc-bar i{display:block;height:100%;background:#ffd34d}
-#prestige-card .pc-bonus{margin-top:4px;color:#ffd34d;font-weight:700}
+#prestige-card{font-size:12px;letter-spacing:.5px;color:#d9c27a}
+#prestige-card .pc-line{margin-top:8px}
+#prestige-card .pc-line b{color:#ffd34d}
+#prestige-card .pc-bar{height:8px;margin:6px 0 10px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden}
+#prestige-card .pc-bar i{display:block;height:100%;background:linear-gradient(90deg,#ffb300,#ffd34d)}
+#prestige-card .pp-stats{display:flex;gap:8px}
+#prestige-card .pp-stats div{flex:1;text-align:center;padding:8px 4px;border:1px solid rgba(255,211,77,.3);border-radius:8px;background:rgba(255,211,77,.06)}
+#prestige-card .pp-stats b{display:block;font-size:18px;color:#ffd34d}
+#prestige-card .pp-stats span{font-size:9px;letter-spacing:1px;opacity:.75}
+#prestige-card .pp-rules{margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,211,77,.2);font-size:11px;line-height:1.5;color:#bba}
+#prestige-card .pp-rules b{color:#ffd34d}
+#prestige-modal{position:fixed;inset:0;z-index:9000;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.75)}
+#prestige-modal.show{display:flex}
+#prestige-modal .pp-card{position:relative;width:min(420px,100%);max-height:calc(100dvh - 32px);overflow-y:auto;padding:20px 18px 18px;border:1px solid #ffd34d;border-radius:14px;background:linear-gradient(160deg,#1a1400,#000 70%);box-shadow:0 0 30px rgba(255,211,77,.25);font-family:var(--mono-font)}
+#prestige-modal .pp-title{font-size:20px;font-weight:900;letter-spacing:2px;color:#ffd34d;margin-bottom:12px}
+#prestige-modal .pp-x{position:absolute;top:10px;right:10px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,211,77,.5);background:#000;color:#ffd34d;font-size:16px;cursor:pointer}
+#star-btn{flex-shrink:0;padding:5px 9px;border:1px solid rgba(255,211,77,.45);border-radius:8px;background:rgba(255,211,77,.08);color:#ffd34d;font-family:var(--mono-font);font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap}
+#star-btn.ready{border-color:#ffd34d;background:rgba(255,211,77,.22);box-shadow:0 0 10px rgba(255,211,77,.6)}
+#star-btn.ready.pulse{animation:starPulse 1.4s ease-in-out infinite}
+@keyframes starPulse{0%,100%{box-shadow:0 0 6px rgba(255,211,77,.5)}50%{box-shadow:0 0 18px rgba(255,211,77,.95)}}
+@media (prefers-reduced-motion:reduce){#star-btn.ready{animation:none}}
+#prestige-btn{margin-top:4px;}
 #prestige-btn{width:100%;padding:9px;border:0;border-radius:8px;background:linear-gradient(90deg,#ffd34d,#ffb300);color:#1a1200;font-weight:900;letter-spacing:1px;font-size:13px;cursor:pointer}
 .lb-prestige{color:#ffd34d;font-size:.85em}
 
@@ -1691,6 +1708,7 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
           <span class="hp-icon">◈</span>
           <span class="hp-name" id="hp-name-display">—</span>
         </div>
+        <button id="star-btn" type="button" title="Prestige" aria-label="Prestige">★ 0</button>
         <button id="settings-btn" title="Settings">⚙</button>
         <div id="header-clicks">
           <div id="header-clicks-label">TOTAL CLICKS</div>
@@ -1700,6 +1718,13 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
           <div id="header-bars-label">TOTAL BARS</div>
           <div id="header-bars-val">0</div>
         </div>
+      </div>
+    </div>
+
+    <div id="prestige-modal" role="dialog" aria-modal="true" aria-label="Prestige" data-nosnippet>
+      <div class="pp-card"><button class="pp-x" type="button" aria-label="Close">✕</button>
+        <div class="pp-title">★ PRESTIGE</div>
+        <div id="prestige-card"></div>
       </div>
     </div>
 
@@ -2936,11 +2961,6 @@ function renderShop() {
     label.id = "shop-label";
     label.style.color = T.muted;
     label.textContent = "PERFORMANCES — ONE TIME BOOSTS";
-    const pc = document.createElement("div");
-    pc.id = "prestige-card";
-    pc.addEventListener("click", e => { if (e.target.closest("#prestige-btn")) promptPrestige(); });
-    shop.appendChild(pc);
-    updatePrestigeCard();
     shop.appendChild(label);
 
     const grid = document.createElement("div");
@@ -3061,7 +3081,6 @@ function updateShopValues() {
   } else if (currentTab === "leaderboard") {
     return; // leaderboard manages its own rendering
   } else {
-    updatePrestigeCard();
     const visibleNow = getVisibleUpgIndices();
     const renderedIds = new Set([...document.querySelectorAll(".upg-card[data-upg-id]")].map(c => c.dataset.upgId));
     const visibleIds = new Set([...visibleNow].map(i => UPGRADES[i].id));
@@ -7259,25 +7278,47 @@ function checkMilestone() {
 }
 
 function updatePrestigeCard() {
+  const ready = prestigeReady();
+  const sb = document.getElementById("star-btn");
+  if (sb) { const t = "★ " + prestigeLevel; if (sb.textContent !== t) sb.textContent = t; sb.classList.toggle("ready", ready); sb.classList.toggle("pulse", ready && !liteMode); }
   const pc = document.getElementById("prestige-card");
   if (!pc) return;
-  const need = prestigeNeed();
-  const bonus = plaques > 0 ? `<div class="pc-bonus">🏆 ${plaques} Gold Plaque${plaques === 1 ? "" : "s"} · +${plaques * 10}% all income · ★${prestigeLevel}</div>` : "";
-  let state, html;
-  if (prestigeReady()) {
-    const g = prestigeGain();
-    state = "ready";
-    html = `<button id="prestige-btn" type="button">PRESTIGE → +${g} 🏆</button>${bonus}`;
-  } else if (eraBars() >= need) {
-    state = "more";
-    html = `<div class="pc-line">🏆 Prestige: next plaque at ¥${formatNum(nextPlaqueRunBars())} this run</div>${bonus}`;
-  } else {
-    state = "locked";
-    const pct = Math.max(0, Math.min(100, eraBars() / need * 100));
-    html = `<div class="pc-line">🔒 Prestige at Trillionbear · ${pct < 1 ? pct.toFixed(2) : pct.toFixed(0)}%</div><div class="pc-bar"><i style="width:${pct.toFixed(2)}%"></i></div>${bonus}`;
-  }
+  const need = prestigeNeed(), eb = eraBars();
+  const pct = Math.max(0, Math.min(100, eb / need * 100));
+  const g = prestigeGain();
+  let state, action;
+  if (ready) { state = "ready"; action = `<button id="prestige-btn" type="button">PRESTIGE → +${g} 🏆</button>`; }
+  else if (eb >= need) { state = "more"; action = `<div class="pc-line">Next plaque at ¥${formatNum(nextPlaqueRunBars())} this run</div>`; }
+  else { state = "locked"; action = `<div class="pc-line">🔒 Unlocks at Trillionbear (¥${formatNum(need)} this run)</div>`; }
+  const html =
+    `<div class="pp-stats"><div><b>★${prestigeLevel}</b><span>LEVEL</span></div><div><b>🏆${plaques}</b><span>PLAQUES</span></div><div><b>+${plaques * 10}%</b><span>ALL INCOME</span></div></div>` +
+    `<div class="pc-line">Prestige now: <b>+${g}</b> plaque${g === 1 ? "" : "s"}</div>` +
+    `<div class="pc-line">Progress to unlock: ¥${formatNum(Math.min(eb, need))} / ¥${formatNum(need)} · ${pct < 1 ? pct.toFixed(2) : pct.toFixed(0)}%</div>` +
+    `<div class="pc-bar"><i style="width:${pct.toFixed(2)}%"></i></div>` +
+    action +
+    `<div class="pp-rules"><div><b>RESETS:</b> bars, generators, performances, fashion, eras.</div><div><b>KEEPS:</b> name, lifetime ¥ on the board, clicks, plaques, ★ level, milestones, settings.</div><div>Each plaque = +10% to clicks and generators, forever.</div></div>`;
   if (pc._html !== html) { pc._html = html; pc.innerHTML = html; pc.dataset.state = state; }
 }
+function openPrestigePanel() {
+  document.getElementById("prestige-modal").classList.add("show");
+  updatePrestigeCard();
+}
+function closePrestigePanel() { document.getElementById("prestige-modal").classList.remove("show"); }
+window.openPrestigePanel = openPrestigePanel; window.closePrestigePanel = closePrestigePanel;
+(function wirePrestigePanel() {
+  const go = () => {
+    const sb = document.getElementById("star-btn"), m = document.getElementById("prestige-modal");
+    if (!sb || !m || m._wired) return; m._wired = true;
+    sb.addEventListener("click", openPrestigePanel);
+    m.addEventListener("click", e => {
+      if (e.target === m || e.target.closest(".pp-x")) closePrestigePanel();
+      else if (e.target.closest("#prestige-btn")) { closePrestigePanel(); promptPrestige(); }
+    });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && m.classList.contains("show")) closePrestigePanel(); });
+    updatePrestigeCard(); setInterval(updatePrestigeCard, 1000);
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go); else go();
+})();
 window.updatePrestigeCard = updatePrestigeCard;
 function promptPrestige() {
   if (!prestigeReady() || paused) return;
@@ -7510,6 +7551,7 @@ function updateCounters() {
   document.getElementById("header-clicks-val").textContent = formatNum(totalClicks);
   document.getElementById("stat-click").textContent = formatNum(clickPower);
   document.getElementById("stat-gen").textContent = "×" + genMult.toFixed(1);
+  updatePrestigeCard();
   { const pr = document.getElementById("stat-plaques-row"); if (pr) { pr.style.display = plaques > 0 ? "" : "none"; document.getElementById("stat-plaques").textContent = "🏆" + plaques + " (+" + (plaques * 10) + "%)"; } }
 
   // Notification dots — light up if something is affordable and not yet bought
