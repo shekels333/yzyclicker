@@ -51,10 +51,22 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
   #winner-overlay .wn-hint a { color: #00ffcc; font-weight: 800; }
   #winner-overlay .wn-close { width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: linear-gradient(90deg, #ffd700, #ff9900); color: #000; font-weight: 900; font-size: 16px; letter-spacing: 1px; cursor: pointer; }
   #winner-overlay.lite, #winner-overlay.lite .wn-card, #winner-overlay.lite .wn-trophy, #winner-overlay.lite .wn-title { animation: none; }
+  #winner-overlay .wn-close:focus-visible, #winner-overlay .wn-close:focus { outline: 2px solid var(--wn-glow, #ffd700); outline-offset: 2px; }
+  #winner-overlay.p2 { --wn-glow: #c0c8d8; background: radial-gradient(circle at 50% 40%, rgba(70,75,85,.88), rgba(0,0,0,.94)); }
+  #winner-overlay.p2 .wn-card { border-color: #d8dde6; box-shadow: 0 0 40px #d8dde688, inset 0 0 30px #d8dde622; background: linear-gradient(160deg, #1a1c20, #000 60%, #001a14); }
+  #winner-overlay.p2 .wn-title, #winner-overlay.p2 .wn-msg b, #winner-overlay.p2 .wn-x { color: #e8edf5; text-shadow: 0 0 18px #c0c8d8; }
+  #winner-overlay.p2 .wn-x { border-color: #d8dde688; }
+  #winner-overlay.p2 .wn-close { background: linear-gradient(90deg, #f2f5fa, #9aa3b2); }
+  #winner-overlay.p3 { --wn-glow: #cd7f32; background: radial-gradient(circle at 50% 40%, rgba(90,50,15,.88), rgba(0,0,0,.94)); }
+  #winner-overlay.p3 .wn-card { border-color: #cd7f32; box-shadow: 0 0 40px #cd7f3288, inset 0 0 30px #cd7f3222; background: linear-gradient(160deg, #1f1206, #000 60%, #001a14); }
+  #winner-overlay.p3 .wn-title, #winner-overlay.p3 .wn-msg b, #winner-overlay.p3 .wn-x { color: #e8a060; text-shadow: 0 0 18px #cd7f32; }
+  #winner-overlay.p3 .wn-x { border-color: #cd7f3288; }
+  #winner-overlay.p3 .wn-close { background: linear-gradient(90deg, #f0a868, #a8612a); }
+  #winner-overlay.lite .wn-title { animation: none; }
   @keyframes wnFade { from { opacity: 0 } to { opacity: 1 } }
   @keyframes wnPop { from { transform: scale(.5); opacity: 0 } to { transform: scale(1); opacity: 1 } }
   @keyframes wnBounce { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
-  @keyframes wnGlow { from { text-shadow: 0 0 10px #ffd700 } to { text-shadow: 0 0 28px #ffd700, 0 0 6px #fff } }
+  @keyframes wnGlow { from { text-shadow: 0 0 10px var(--wn-glow, #ffd700) } to { text-shadow: 0 0 28px var(--wn-glow, #ffd700), 0 0 6px #fff } }
   @keyframes wnFall { from { top: -20px; } to { top: 105%; transform: rotate(720deg); } }
   @media (prefers-reduced-motion: reduce) { #winner-overlay, #winner-overlay * { animation: none !important; } #winner-overlay .wn-confetti { display: none; } }
 </style>
@@ -8007,22 +8019,27 @@ document.getElementById("shop").addEventListener("click", (e) => {
     finally { contestBusy = false; }
   }
   function handleContestPlace(name, place) {
-    if (place === 1) showWinnerPopup(name);   // places 2–5: add rewards here later
+    if (place === 1 || place === 2 || place === 3) showWinnerPopup(name, place);   // places 4–5: nothing yet
   }
-  function showWinnerPopup(name) {
+  const PLACE_INFO = {
+    1: { cls: 'p1', icon: '🥇', ord: 'FIRST', line: 'You won the contest! 🐻' },
+    2: { cls: 'p2', icon: '🥈', ord: '2ND', line: 'You placed in the contest! 🐻' },
+    3: { cls: 'p3', icon: '🥉', ord: '3RD', line: 'You placed in the contest! 🐻' } };
+  function showWinnerPopup(name, place) {
+    const P = PLACE_INFO[place || 1];
     const key = CONTEST_SEEN + String(name).toUpperCase();
     try { if (localStorage.getItem(key)) return; } catch (e) {}
     if (document.getElementById('winner-overlay')) return;
     const ov = document.createElement('div');
-    ov.id = 'winner-overlay'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('data-nosnippet', '');
+    ov.id = 'winner-overlay'; ov.className = P.cls; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('data-nosnippet', '');
     if (typeof liteMode !== 'undefined' && liteMode) ov.classList.add('lite');
     ov.innerHTML = '<div class="wn-confetti" aria-hidden="true"></div>' +
       '<div class="wn-card">' +
       '<button class="wn-x" type="button" aria-label="Close">✕</button>' +
-      '<div class="wn-trophy" aria-hidden="true">🏆</div>' +
+      '<div class="wn-trophy" aria-hidden="true">' + P.icon + '</div>' +
       '<div class="wn-title">CONGRATULATIONS</div>' +
       '<div class="wn-name"></div>' +
-      '<div class="wn-msg">You were the <b>FIRST</b> player to reach the <b>Trillionbear</b> era.<br>You won the contest! 🐻</div>' +
+      '<div class="wn-msg">You were the <b>' + P.ord + '</b> player to reach the <b>Trillionbear</b> era.<br>' + P.line + '</div>' +
       '<div class="wn-hint">To claim your reward, DM <a href="https://x.com/nosheks" target="_blank" rel="noopener">@nosheks</a> on X.</div>' +
       '<button class="wn-close" type="button">CLOSE</button>' +
       '</div>';
@@ -8031,15 +8048,17 @@ document.getElementById("shop").addEventListener("click", (e) => {
     ov.querySelector('.wn-x').addEventListener('click', close);
     ov.querySelector('.wn-close').addEventListener('click', close);
     const cf = ov.querySelector('.wn-confetti');
-    if (!ov.classList.contains('lite')) {
-      const cols = ['#ffd700','#00ffcc','#ff3cac','#ffffff','#ff9900','#7b61ff'];
-      for (let i = 0; i < 70; i++) {
+    const liteCf = ov.classList.contains('lite');
+    {
+      const cols = [P.cls === 'p2' ? '#d8dde6' : P.cls === 'p3' ? '#cd7f32' : '#ffd700','#00ffcc','#ff3cac','#ffffff','#ff9900','#7b61ff'];
+      for (let i = 0, n = liteCf ? 40 : 70; i < n; i++) {
         const d = document.createElement('i');
         d.style.left = (Math.random() * 100) + '%';
         d.style.background = cols[i % cols.length];
         d.style.animationDelay = (Math.random() * 4).toFixed(2) + 's';
         d.style.animationDuration = (3 + Math.random() * 3).toFixed(2) + 's';
         d.style.transform = 'rotate(' + Math.floor(Math.random() * 360) + 'deg)';
+        if (liteCf) { d.style.animation = 'none'; d.style.top = (Math.random() * 100) + '%'; d.style.opacity = '.55'; }
         cf.appendChild(d);
       }
     }
