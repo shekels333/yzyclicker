@@ -2333,12 +2333,10 @@ const PRESTIGE_ERA = 14; // Trillionbear
 const PRESTIGE_MAX = 100;
 function prestigeMaxed() { return prestigeLevel >= PRESTIGE_MAX; }
 function prestigeNeed() { return ALBUM_THEMES[PRESTIGE_ERA].threshold; }
-// Gold Plaques are derived from lifetime banked run bars: floor(4·sqrt(L / 33T)).
-function plaquesFor(L) { return L > 0 ? Math.floor(4 * Math.sqrt(L / prestigeNeed()) + 1e-9) : 0; }
+// Gold Plaques: exactly one per prestige (plaques === prestigeLevel, max 100). Banking a bigger run gives no extra.
 function plaqueMult() { return 1 + 0.1 * plaques; }
-function prestigeGain() { if (prestigeMaxed()) return 0; const rb = eraBars(); return rb >= prestigeNeed() ? Math.max(0, plaquesFor(prestigeBars + rb) - plaques) : 0; }
+function prestigeGain() { if (prestigeMaxed()) return 0; const rb = eraBars(); return rb >= prestigeNeed() ? 1 : 0; }
 function prestigeReady() { return prestigeGain() >= 1; }
-function nextPlaqueRunBars() { const k = plaques + 1; return Math.max(prestigeNeed(), Math.ceil((k / 4) * (k / 4) * prestigeNeed() - prestigeBars)); }
 // Never trust saved plaques/levels: clamp to what lifetime bars can support and recompute.
 function sanitizePrestige(o, tb, ob) {
   const n = v => { v = Number(v); return Number.isFinite(v) && v > 0 ? v : 0; };
@@ -2349,7 +2347,7 @@ function sanitizePrestige(o, tb, ob) {
   let lvl = Math.min(PRESTIGE_MAX, Math.floor(n(o && o.prestigeLevel)), Math.floor(L / prestigeNeed() + 1e-9));
   if (lvl <= 0) { lvl = 0; L = 0; rb = Math.max(0, tb - (ob || 0)); }
   const eb = Math.min(ALBUM_THEMES.length - 1, Math.floor(n(o && o.eraBest)));
-  return { runBars: rb, prestigeBars: L, prestigeLevel: lvl, plaques: plaquesFor(L), eraBest: lvl > 0 ? Math.max(eb, PRESTIGE_ERA) : 0 };
+  return { runBars: rb, prestigeBars: L, prestigeLevel: lvl, plaques: lvl, eraBest: lvl > 0 ? Math.max(eb, PRESTIGE_ERA) : 0 };
 }
 function applyPrestigeState(o) {
   const r = sanitizePrestige(o, totalBars, offlineBars);
@@ -7525,16 +7523,15 @@ function updatePrestigeCard() {
   let state, action;
   if (prestigeMaxed()) { state = "max"; action = `<button id="prestige-btn" type="button" disabled style="opacity:.45;cursor:default">★${PRESTIGE_MAX} MAX</button><div class="pc-line">Max prestige reached — nothing more to earn.</div>`; }
   else if (ready) { state = "ready"; action = `<button id="prestige-btn" type="button">PRESTIGE → +${g} 🏆</button>`; }
-  else if (eb >= need) { state = "more"; action = `<div class="pc-line">Next plaque at ¥${formatNum(nextPlaqueRunBars())} this run</div>`; }
   else { state = "locked"; action = `<div class="pc-line">🔒 Unlocks at Trillionbear (¥${formatNum(need)} this run)</div>`; }
   const html =
     `<div class="pp-stats"><div><b>★${prestigeLevel}${prestigeMaxed() ? " MAX" : ""}</b><span>LEVEL</span></div><div><b>🏆${plaques}</b><span>PLAQUES</span></div><div><b>+${plaques * 10}%</b><span>ALL INCOME</span></div></div>` +
     (prestigeMaxed() ? "" :
-    `<div class="pc-line">Prestige now: <b>+${g}</b> plaque${g === 1 ? "" : "s"}</div>` +
+    `<div class="pc-line">Each prestige: <b>+1</b> plaque (+10% all income)</div>` +
     `<div class="pc-line">Progress to unlock: ¥${formatNum(Math.min(eb, need))} / ¥${formatNum(need)} · ${pct < 1 ? pct.toFixed(2) : pct.toFixed(0)}%</div>` +
     `<div class="pc-bar"><i style="width:${pct.toFixed(2)}%"></i></div>`) +
     action +
-    `<div class="pp-rules"><div><b>RESETS:</b> bars, generators, performances, fashion, eras.</div><div><b>KEEPS:</b> name, lifetime ¥ on the board, clicks, plaques, ★ level, milestones, settings.</div><div>Each plaque = +10% to clicks and generators, forever.</div></div>`;
+    `<div class="pp-rules"><div><b>RESETS:</b> bars, generators, performances, fashion, eras.</div><div><b>KEEPS:</b> name, lifetime ¥ on the board, clicks, plaques, ★ level, milestones, settings.</div><div>1 plaque per prestige — a bigger run doesn't earn extra. Each plaque = +10% to clicks and generators, forever.</div></div>`;
   if (pc._html !== html) { pc._html = html; pc.innerHTML = html; pc.dataset.state = state; }
 }
 function showShopView(on) {
@@ -7720,8 +7717,8 @@ window.updatePrestigeCard = updatePrestigeCard;
 function promptPrestige() {
   if (!prestigeReady() || paused) return;
   const g = prestigeGain(), np = plaques + g;
-  const msg = `PRESTIGE for +${g} Gold Plaque${g === 1 ? "" : "s"}?\n\n` +
-    `You'll have ${np} plaques = +${np * 10}% to ALL income (clicks + generators), forever.\n\n` +
+  const msg = `PRESTIGE for +1 Gold Plaque?\n\n` +
+    `You'll have ${np} plaque${np === 1 ? "" : "s"} = +${np * 10}% to ALL income (clicks + generators), forever.\n\n` +
     `RESETS: bars, generators, performances, fashion, and eras (back to College Dropout).\n` +
     `KEEPS: your name, lifetime ¥ on the leaderboard, clicks, plaques, milestones, settings.`;
   if (!confirm(msg)) return;
@@ -7734,7 +7731,7 @@ function doPrestige() {
   eraBest = Math.max(eraBest, syncEraMax());
   prestigeBars += eraBars();
   prestigeLevel = Math.min(PRESTIGE_MAX, prestigeLevel + 1);
-  plaques = plaquesFor(prestigeBars);
+  plaques = prestigeLevel;
   bars = 0; runBars = 0; offlineBars = 0; eraMax = 0;
   Object.keys(owned).forEach(k => { owned[k] = 0; });
   boughtUpgrades = new Set(); boughtFashion = new Set();
