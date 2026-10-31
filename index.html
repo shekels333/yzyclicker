@@ -79,7 +79,7 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 #cos-shop .cs-item{display:flex;align-items:center;gap:8px;padding:7px 8px;margin-bottom:5px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.03)}
 #cos-shop .cs-item.eq{border-color:#00ffcc88;background:rgba(0,255,204,.06)}
 #cos-shop .cs-prev{flex:1;min-width:0;font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ddd}
-#cos-shop .cs-sw{width:30px;height:22px;border-radius:5px;flex-shrink:0;background:#0b0900}
+#cos-shop .cs-sw{width:30px;height:22px;border-radius:5px;flex-shrink:0;background-color:#0b0900}
 #cos-shop .cs-lbl{font-size:10px;opacity:.7;display:block;font-weight:400;letter-spacing:1px;color:#bba}
 #cos-shop .cs-btn{flex-shrink:0;min-width:74px;padding:6px 8px;border:0;border-radius:6px;font-family:inherit;font-weight:900;font-size:11px;cursor:pointer;background:#ffd34d;color:#1a1200}
 #cos-shop .cs-btn.eq{background:#00ffcc;color:#002a22}
@@ -90,13 +90,24 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 /* ── Profile card modal ── */
 #pcard-modal{position:fixed;inset:0;z-index:9100;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.72)}
 #pcard-modal.show{display:flex}
-#pcard-modal .pcd{position:relative;width:min(340px,100%);padding:22px 18px 18px;border-radius:14px;background:linear-gradient(160deg,#151208,#000 75%);font-family:var(--mono-font);color:#ddd;text-align:center}
-#pcard-modal .pcd-x{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:#000;color:#fff;cursor:pointer}
-#pcard-modal .pcd-name{font-size:24px;font-weight:900;letter-spacing:1px;margin:6px 0 4px;word-break:break-all}
-#pcard-modal .pcd-star{color:#ffd34d;font-weight:800}
-#pcard-modal .pcd-row{display:flex;justify-content:space-between;padding:6px 2px;border-top:1px solid rgba(255,255,255,.08);font-size:12px}
-#pcard-modal .pcd-row span:first-child{opacity:.6;letter-spacing:1px}
-#pcard-modal .pcd-x-link{display:inline-block;margin-top:10px;color:#00ffcc;font-weight:800;text-decoration:none}
+#cs-preview{position:sticky;top:-20px;z-index:2;margin:0 -2px 10px;padding:8px 2px 10px;background:linear-gradient(#0d0a00 85%,rgba(13,10,0,0))}
+#cs-preview .pv-lbl{font-size:10px;letter-spacing:1.5px;color:#bba;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#cs-preview .pcd{width:100%;padding:10px 12px 8px}
+#cs-preview .pcd-name{font-size:19px;margin:0 0 2px}
+#cs-preview .pcd-star{font-size:12px}
+#cs-preview .pcd-rows{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px}
+#cs-preview .pcd-row{flex-direction:column;align-items:center;padding:4px 0 0;font-size:11px}
+#cs-preview .pcd-row span:first-child{font-size:9px}
+#cs-preview .pcd-x-link{margin-top:4px;font-size:11px}
+#cos-shop .cs-item{cursor:pointer}
+#cos-shop .cs-item.sel{outline:2px solid #ffd34d;outline-offset:-1px;background:rgba(255,211,77,.08)}
+:where(.pcd){position:relative;width:min(340px,100%);padding:22px 18px 18px;border-radius:14px;background:linear-gradient(160deg,#151208,#000 75%);font-family:var(--mono-font);color:#ddd;text-align:center}
+.pcd-x{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:#000;color:#fff;cursor:pointer}
+.pcd-name{font-size:24px;font-weight:900;letter-spacing:1px;margin:6px 0 4px;word-break:break-all}
+.pcd-star{color:#ffd34d;font-weight:800}
+.pcd-row{display:flex;justify-content:space-between;padding:6px 2px;border-top:1px solid rgba(255,255,255,.08);font-size:12px}
+.pcd-row span:first-child{opacity:.6;letter-spacing:1px}
+.pcd-x-link{display:inline-block;margin-top:10px;color:#00ffcc;font-weight:800;text-decoration:none}
 #prestige-btn{margin-top:4px;}
 #prestige-btn{width:100%;padding:9px;border:0;border-radius:8px;background:linear-gradient(90deg,#ffd34d,#ffb300);color:#1a1200;font-weight:900;letter-spacing:1px;font-size:13px;cursor:pointer}
 .lb-prestige{color:#ffd34d;font-size:.85em}
@@ -7430,7 +7441,7 @@ window.updatePrestigeCard = updatePrestigeCard;
   const BY = {}; FX.forEach(x => BY[x.id] = Object.assign({ kind: 'fx' }, x)); FR.forEach(x => BY[x.id] = Object.assign({ kind: 'frame' }, x));
   const PER_PRESTIGE = 1;
   const state = { loaded: false, balance: 0, earned: 0, owned: [], name_fx: null, frame: null };
-  let tab = 'fx', busy = false, msg = '';
+  let tab = 'fx', busy = false, msg = '', pvId = null;
   const fxClass = id => (BY[id] && BY[id].kind === 'fx') ? BY[id].cls : '';
   const frClass = id => (BY[id] && BY[id].kind === 'frame') ? 'pfr ' + BY[id].cls + (BY[id].anim ? ' pfr-anim' : '') : 'pfr';
   const me = () => { try { return (localStorage.getItem('yzy_username') || '').toUpperCase(); } catch (e) { return ''; } };
@@ -7485,20 +7496,23 @@ window.updatePrestigeCard = updatePrestigeCard;
       const dis = busy || !state.loaded || (!own && state.balance < it.price);
       const prev = tab === 'fx' ? `<span class="cs-prev"><span class="${it.cls}" data-x>${''}</span><span class="cs-lbl">${it.name}${it.price === 0 ? ' · FREE' : ''}</span></span>`
         : `<span class="cs-sw ${frClass(it.id)}"></span><span class="cs-prev">${it.name}<span class="cs-lbl">${it.price === 0 ? 'FREE' : 'FRAME'}</span></span>`;
-      h += `<div class="cs-item${eq ? ' eq' : ''}" data-id="${it.id}">${prev}<button type="button" class="${cls}" data-id="${it.id}"${dis ? ' disabled' : ''}>${eq ? 'EQUIPPED ✓' : lbl}</button></div>`;
+      h += `<div class="cs-item${eq ? ' eq' : ''}${pvId === it.id ? ' sel' : ''}" data-id="${it.id}">${prev}<button type="button" class="${cls}" data-id="${it.id}"${dis ? ' disabled' : ''}>${eq ? 'EQUIPPED ✓' : lbl}</button></div>`;
     });
     h += `<div class="cs-msg" id="cs-msg">${msg}</div>`;
-    el.innerHTML = h;
+    el.innerHTML = '<div id="cs-preview"></div>' + h;
+    renderPreview(el.querySelector('#cs-preview'));
     el.querySelectorAll('[data-x]').forEach(n => { n.textContent = nm; n.dataset.text = nm; });
   }
   function wire() {
     const el = document.getElementById('cos-shop'); if (!el || el._w) return; el._w = 1;
     el.addEventListener('click', e => {
       const t = e.target.closest('[data-tab]'); if (t) { tab = t.dataset.tab; msg = ''; render(); return; }
-      const b = e.target.closest('button.cs-btn'); if (b && !b.disabled) act(b.dataset.id);
+      const b = e.target.closest('button.cs-btn');
+      if (!b) { const row = e.target.closest('.cs-item'); if (row && BY[row.dataset.id]) { pvId = row.dataset.id; render(); } return; }
+      if (!b.disabled) act(b.dataset.id);
       else if (b && b.disabled && BY[b.dataset.id] && !owns(b.dataset.id) && state.loaded) { msg = 'Not enough YzY Tokens — prestige to earn more.'; render(); }
     });
-    const sb = document.getElementById('star-btn'); if (sb) sb.addEventListener('click', () => { render(); load(); });
+    const sb = document.getElementById('star-btn'); if (sb) sb.addEventListener('click', () => { pvId = null; render(); load(); });
     render();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
@@ -7512,7 +7526,11 @@ window.updatePrestigeCard = updatePrestigeCard;
       document.body.appendChild(m);
     }
     const fx = isMe && state.loaded ? state.name_fx : row.name_fx, fr = isMe && state.loaded ? state.frame : row.frame;
-    const card = m.querySelector('.pcd'); card.className = 'pcd ' + frClass(fr);
+    fillCard(m.querySelector('.pcd'), row, fx, fr);
+    m.classList.add('show');
+  }
+  function fillCard(card, row, fx, fr) {
+    const m = card; card.className = 'pcd ' + frClass(fr);
     const n = m.querySelector('.pcd-name span'); n.textContent = String(row.username || 'ANON').toUpperCase(); n.className = fxClass(fx); n.dataset.text = n.textContent;
     const pv = Math.min(500, Math.floor(Number(row.prestige) || 0));
     m.querySelector('.pcd-star').textContent = '★' + pv + (pv === 1 ? ' prestige' : ' prestiges');
@@ -7521,7 +7539,20 @@ window.updatePrestigeCard = updatePrestigeCard;
       .forEach(([k, v]) => { const d = document.createElement('div'); d.className = 'pcd-row'; const a = document.createElement('span'); a.textContent = k; const b = document.createElement('span'); b.textContent = v; d.appendChild(a); d.appendChild(b); rows.appendChild(d); });
     const xl = m.querySelector('.pcd-x-link'); const h = String(row.twitter_handle || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 15);
     if (h) { xl.style.display = ''; xl.href = 'https://x.com/' + h; xl.textContent = '@' + h + ' on X ↗'; } else xl.style.display = 'none';
-    m.classList.add('show');
+  }
+  function myRow() {
+    let tw = ''; try { tw = window.getTwitterHandle ? window.getTwitterHandle() : ''; } catch (e) {}
+    return { username: me() || 'YOU', prestige: typeof prestigeLevel !== 'undefined' ? prestigeLevel : 0,
+      era: (typeof ALBUM_THEMES !== 'undefined' && ALBUM_THEMES[albumIdx]) ? ALBUM_THEMES[albumIdx].name : '—',
+      total_bars: typeof totalBars !== 'undefined' ? totalBars : 0, total_clicks: typeof totalClicks !== 'undefined' ? totalClicks : 0, twitter_handle: tw };
+  }
+  function renderPreview(box) {
+    const it = BY[pvId];
+    const fx = it && it.kind === 'fx' ? it.id : state.name_fx, fr = it && it.kind !== 'fx' ? it.id : state.frame;
+    box.innerHTML = '<div class="pv-lbl"></div><div class="pcd"><div class="pcd-name"><span></span></div><div class="pcd-star"></div><div class="pcd-rows"></div><a class="pcd-x-link" target="_blank" rel="noopener"></a></div>';
+    const parts = [fx && BY[fx] ? BY[fx].name : 'No effect', fr && BY[fr] ? BY[fr].name : 'No frame'];
+    box.querySelector('.pv-lbl').textContent = (it ? 'PREVIEW · ' : 'YOUR CARD · ') + parts.join(' + ') + (it && !owns(it.id) ? ' · ' + it.price + ' YzY' : '');
+    fillCard(box.querySelector('.pcd'), myRow(), fx, fr);
   }
   window.yzyCos = { state, fxClass, frClass, openProfile, load, render, catalog: BY };
   setTimeout(() => { if (me()) load(); }, 3000);
