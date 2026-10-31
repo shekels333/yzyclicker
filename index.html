@@ -81,7 +81,9 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 .pfr-concrete{border:3px solid #8a8a85;box-shadow:inset 0 0 0 1px #555}
 .pfr-gold{border:3px solid #ffd34d;box-shadow:0 0 18px rgba(255,211,77,.45),inset 0 0 12px rgba(255,211,77,.2)}
 .pfr-808{border:3px solid #e82200;box-shadow:0 0 16px rgba(232,34,0,.5),inset 0 0 0 2px #1a0000,inset 0 0 0 4px rgba(232,34,0,.5)}
-.pfr-mbdtf{border:4px solid #f0c830;outline:3px solid #b00010;outline-offset:-10px;box-shadow:0 0 20px rgba(240,200,48,.4)}
+.pfr-glow{border:3px solid #39ff88;background:radial-gradient(ellipse at 50% 0%,rgba(57,255,136,.10),transparent 60%),#020805!important;box-shadow:0 0 6px #39ff88,0 0 18px rgba(57,255,136,.7),0 0 42px rgba(0,229,255,.35),inset 0 0 8px rgba(57,255,136,.6),inset 0 0 22px rgba(0,229,255,.18)}
+.pfr-glow.pfr-anim{animation:pfrGlow 3.2s ease-in-out infinite}
+@keyframes pfrGlow{0%,100%{box-shadow:0 0 6px #39ff88,0 0 18px rgba(57,255,136,.7),0 0 42px rgba(0,229,255,.35),inset 0 0 8px rgba(57,255,136,.6),inset 0 0 22px rgba(0,229,255,.18)}50%{box-shadow:0 0 4px #39ff88,0 0 12px rgba(57,255,136,.5),0 0 28px rgba(0,229,255,.22),inset 0 0 6px rgba(57,255,136,.45),inset 0 0 14px rgba(0,229,255,.12)}93%{border-color:#39ff88}95%{border-color:#1c9950}97%{border-color:#39ff88}}
 .pfr-yeezus{border:3px solid #fff;box-shadow:4px 4px 0 #e8160a,-4px -4px 0 #00e5ff;}
 .pfr-yeezus.pfr-anim{animation:pfrYz 2.4s steps(1) infinite}
 .pfr-trillion{border:4px solid transparent;background-image:linear-gradient(#0b0900,#0b0900),linear-gradient(120deg,#ffe866,#ff9a3c,#fff6c8,#ffd34d);background-origin:border-box;background-clip:padding-box,border-box;box-shadow:0 0 24px rgba(255,232,102,.6)}
@@ -7458,7 +7460,7 @@ window.updatePrestigeCard = updatePrestigeCard;
     { id: 'fr_concrete', cls: 'pfr-concrete', name: 'Concrete',     price: 0 },
     { id: 'fr_gold',     cls: 'pfr-gold',     name: 'Gold Plaque',  price: 2 },
     { id: 'fr_808',      cls: 'pfr-808',      name: '808s Red',     price: 4 },
-    { id: 'fr_mbdtf',    cls: 'pfr-mbdtf',    name: 'MBDTF',        price: 6 },
+    { id: 'fr_glow',     cls: 'pfr-glow',     name: 'Glow',         price: 6, anim: 1 },
     { id: 'fr_yeezus',   cls: 'pfr-yeezus',   name: 'Yeezus',       price: 9, anim: 1 },
     { id: 'fr_trillion', cls: 'pfr-trillion', name: 'Trillionbear', price: 15, anim: 1 } ];
   const BY = {}; FX.forEach(x => BY[x.id] = Object.assign({ kind: 'fx' }, x)); FR.forEach(x => BY[x.id] = Object.assign({ kind: 'frame' }, x));
@@ -7466,15 +7468,16 @@ window.updatePrestigeCard = updatePrestigeCard;
   const state = { loaded: false, balance: 0, earned: 0, owned: [], name_fx: null, frame: null };
   let tab = 'fx', busy = false, msg = '', pvId = null;
   const fxClass = id => (BY[id] && BY[id].kind === 'fx') ? BY[id].cls : '';
-  const frClass = id => (BY[id] && BY[id].kind === 'frame') ? 'pfr ' + BY[id].cls + (BY[id].anim ? ' pfr-anim' : '') : 'pfr';
+  const FR_ALIAS = { fr_mbdtf: 'fr_glow' };
+  const frClass = id => (id = FR_ALIAS[id] || id, BY[id] && BY[id].kind === 'frame') ? 'pfr ' + BY[id].cls + (BY[id].anim ? ' pfr-anim' : '') : 'pfr';
   const me = () => { try { return (localStorage.getItem('yzy_username') || '').toUpperCase(); } catch (e) { return ''; } };
   function syncLite() { document.documentElement.classList.toggle('yzy-lite', typeof liteMode !== 'undefined' && !!liteMode); }
   syncLite(); setInterval(syncLite, 1000);
   function applyState(r) {
     if (!r || !r.ok) return false;
     state.loaded = true; state.balance = Math.max(0, Math.floor(Number(r.balance) || 0)); state.earned = Math.floor(Number(r.earned) || 0);
-    state.owned = Array.isArray(r.owned) ? r.owned.filter(id => BY[id]) : [];
-    state.name_fx = BY[r.name_fx] ? r.name_fx : null; state.frame = BY[r.frame] ? r.frame : null;
+    state.owned = Array.isArray(r.owned) ? r.owned.map(id => FR_ALIAS[id] || id).filter(id => BY[id]) : [];
+    state.name_fx = BY[r.name_fx] ? r.name_fx : null; const rf = FR_ALIAS[r.frame] || r.frame; state.frame = BY[rf] ? rf : null;
     return true;
   }
   async function rpc(fn, args) {
