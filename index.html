@@ -25,6 +25,11 @@ button{transition:filter .15s ease,border-color .15s ease,background-color .15s 
 #prestige-card .pp-rules b{color:#ffd34d}
 #prestige-modal{position:fixed;inset:0;z-index:9000;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.75)}
 #prestige-modal.show{display:flex}
+#pp-shop{display:none}#prestige-modal.shopview #pp-shop{display:block}#prestige-modal.shopview #pp-main{display:none}
+#shop-open-btn{display:flex;align-items:center;gap:8px;width:100%;margin-top:14px;padding:14px 16px;border:1px solid #ffd34d;border-radius:10px;background:rgba(255,211,77,.12);color:#ffd34d;font-family:var(--mono-font);font-weight:900;font-size:15px;letter-spacing:2px;cursor:pointer;min-height:48px}
+#shop-open-btn:hover{background:rgba(255,211,77,.22)}#shop-open-bal{font-weight:600;letter-spacing:.5px;font-size:13px;color:#d9c27a}.so-arr{margin-left:auto;font-size:20px}
+#shop-back-btn{min-height:36px;padding:6px 12px;border:1px solid rgba(255,211,77,.5);border-radius:8px;background:#000;color:#ffd34d;font-family:var(--mono-font);font-weight:800;letter-spacing:1px;cursor:pointer}
+#prestige-modal #pp-shop #cos-shop{margin-top:10px;padding-top:0;border-top:0}
 #prestige-modal .pp-card{position:relative;width:min(420px,100%);max-height:calc(100dvh - 32px);overflow-y:auto;padding:20px 18px 18px;border:1px solid #ffd34d;border-radius:14px;background:linear-gradient(160deg,#1a1400,#000 70%);box-shadow:0 0 30px rgba(255,211,77,.25);font-family:var(--mono-font)}
 #prestige-modal .pp-title{font-size:20px;font-weight:900;letter-spacing:2px;color:#ffd34d;margin-bottom:12px}
 #prestige-modal .pp-x{position:absolute;top:10px;right:10px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,211,77,.5);background:#000;color:#ffd34d;font-size:16px;cursor:pointer}
@@ -1794,9 +1799,10 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 
     <div id="prestige-modal" role="dialog" aria-modal="true" aria-label="Prestige" data-nosnippet>
       <div class="pp-card"><button class="pp-x" type="button" aria-label="Close">✕</button>
-        <div class="pp-title">★ PRESTIGE</div>
+        <div id="pp-main"><div class="pp-title">★ PRESTIGE</div>
         <div id="prestige-card"></div>
-        <div id="cos-shop"></div>
+        <button type="button" id="shop-open-btn"><span>SHOP</span><span id="shop-open-bal">· YzY Tokens</span><span class="so-arr">›</span></button></div>
+        <div id="pp-shop"><button type="button" id="shop-back-btn">← BACK</button><div id="cos-shop"></div></div>
       </div>
     </div>
 
@@ -7371,7 +7377,14 @@ function updatePrestigeCard() {
     `<div class="pp-rules"><div><b>RESETS:</b> bars, generators, performances, fashion, eras.</div><div><b>KEEPS:</b> name, lifetime ¥ on the board, clicks, plaques, ★ level, milestones, settings.</div><div>Each plaque = +10% to clicks and generators, forever.</div></div>`;
   if (pc._html !== html) { pc._html = html; pc.innerHTML = html; pc.dataset.state = state; }
 }
+function showShopView(on) {
+  const m = document.getElementById("prestige-modal"); m.classList.toggle("shopview", !!on);
+  m.querySelector(".pp-card").scrollTop = 0;
+  const f = document.getElementById(on ? "shop-back-btn" : "shop-open-btn"); if (f) try { f.focus({ preventScroll: true }); } catch (e) {}
+}
+window.showShopView = showShopView;
 function openPrestigePanel() {
+  document.getElementById("prestige-modal").classList.remove("shopview");
   document.getElementById("prestige-modal").classList.add("show");
   updatePrestigeCard();
 }
@@ -7385,8 +7398,10 @@ window.openPrestigePanel = openPrestigePanel; window.closePrestigePanel = closeP
     m.addEventListener("click", e => {
       if (e.target === m || e.target.closest(".pp-x")) closePrestigePanel();
       else if (e.target.closest("#prestige-btn")) { closePrestigePanel(); promptPrestige(); }
+      else if (e.target.closest("#shop-open-btn")) showShopView(true);
+      else if (e.target.closest("#shop-back-btn")) showShopView(false);
     });
-    document.addEventListener("keydown", e => { if (e.key === "Escape" && m.classList.contains("show")) closePrestigePanel(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && m.classList.contains("show")) { if (m.classList.contains("shopview")) showShopView(false); else closePrestigePanel(); } });
     updatePrestigeCard(); setInterval(updatePrestigeCard, 1000);
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go); else go();
@@ -7456,6 +7471,8 @@ window.updatePrestigeCard = updatePrestigeCard;
     if (window.yzyRenderBoard) window.yzyRenderBoard();
   }
   function render() {
+    const ob = document.getElementById('shop-open-bal');
+    if (ob) ob.textContent = state.loaded ? `· ${state.balance} YzY Token${state.balance === 1 ? '' : 's'}` : '· YzY Tokens';
     const el = document.getElementById('cos-shop'); if (!el) return;
     const items = tab === 'fx' ? FX : FR; const nm = me() || 'YOUR NAME';
     let h = `<div class="cs-head"><span class="cs-title">SHOP</span><span class="cs-bal" id="cs-bal"><b class="yzy-tk">YzY</b> ${state.balance} YzY Token${state.balance===1?'':'s'}</span></div>` +
