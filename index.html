@@ -113,7 +113,7 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 #pcard-modal.show{display:flex}
 #cs-preview{position:sticky;top:-20px;z-index:2;margin:0 -2px 10px;padding:8px 2px 10px;background:linear-gradient(#0d0a00 85%,rgba(13,10,0,0))}
 #cs-preview .pv-lbl{font-size:10px;letter-spacing:1.5px;color:#bba;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#cs-preview .pcd{width:100%;padding:10px 12px 8px}
+#cs-preview .pcd{width:100%}
 #cs-preview .pcd-name{font-size:19px;margin:0 0 2px}
 #cs-preview .pcd-star{font-size:12px}
 #cs-preview .pcd-rows{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px}
@@ -122,9 +122,11 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 #cs-preview .pcd-x-link{margin-top:4px;font-size:11px}
 #cos-shop .cs-item{cursor:pointer}
 #cos-shop .cs-item.sel{outline:2px solid #ffd34d;outline-offset:-1px;background:rgba(255,211,77,.08)}
-:where(.pcd){position:relative;width:min(340px,100%);padding:22px 18px 18px;border-radius:14px;background:linear-gradient(160deg,#151208,#000 75%);font-family:var(--mono-font);color:#ddd;text-align:center}
-.pcd-x{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:#000;color:#fff;cursor:pointer}
-.pcd-name{font-size:24px;font-weight:900;letter-spacing:1px;margin:6px 0 4px;word-break:break-all}
+:where(.pcd){position:relative;width:min(380px,100%);box-sizing:border-box;border-radius:14px;background:linear-gradient(160deg,#151208,#000 75%);font-family:var(--mono-font);color:#ddd;text-align:center}
+#pcard-modal .pcd{padding:30px 30px 24px}
+#cs-preview .pcd{padding:18px 24px 14px}
+.pcd-x{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:#000;color:#fff;cursor:pointer}
+.pcd-name{font-size:24px;font-weight:900;letter-spacing:1px;margin:6px 34px 4px;word-break:break-all}
 .pcd-star{color:#ffd34d;font-weight:800}
 .pcd-row{display:flex;justify-content:space-between;padding:6px 2px;border-top:1px solid rgba(255,255,255,.08);font-size:12px}
 .pcd-row span:first-child{opacity:.6;letter-spacing:1px}
