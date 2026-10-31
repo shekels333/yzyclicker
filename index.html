@@ -4,6 +4,14 @@
 <script>try{if(Object.keys(localStorage).some(k=>k.indexOf('yzy_save_v1_')===0))document.documentElement.classList.add('yzy-booting');}catch(e){}setTimeout(function(){document.documentElement.classList.remove('yzy-booting')},3000);</script>
 <style>html.yzy-booting body{visibility:hidden}#lb-mode-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
 #lb-mode-row .lb-mode-btn{background:transparent;border:1px solid transparent;border-radius:4px;padding:3px 10px;font-family:var(--mono-font,'Space Mono',monospace);font-size: 11px;letter-spacing: 1.5px;text-transform:uppercase;cursor:pointer}
+#lb-header-right{display:flex;align-items:center;gap:8px}
+#lb-mode-row{justify-content:space-between;flex-wrap:wrap;gap:6px;margin:8px 0 6px}
+#lb-wrap .lb-seg{display:inline-flex;gap:2px;padding:2px;border:1px solid currentColor;border-radius:6px;flex-shrink:0;position:relative}
+#lb-wrap .lb-seg{border-color:color-mix(in srgb,currentColor 30%,transparent)}
+#lb-wrap .lb-seg>button{margin:0;padding:4px 7px;font-size:10.5px;letter-spacing:1px;border-radius:4px;white-space:nowrap}
+#lb-submit-row{justify-content:flex-start}
+#lb-submit-row:has(#lb-submit-status:empty):has(#lb-week-reset[style*="none"]){display:none}
+#lb-week-reset{font-family:var(--mono-font,'Space Mono',monospace);font-size:11px;letter-spacing:1px}
 #lb-week-reset{margin-left:auto;font-size: 10px;letter-spacing: 1.0px;text-transform:uppercase font-family: var(--small-font, var(--mono-font));}
 /* ── Readability polish ── */
 body{font-variant-numeric:lining-nums tabular-nums;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
@@ -8580,6 +8588,17 @@ document.getElementById("shop").addEventListener("click", (e) => {
       ${CONFIGURED ? `<button id="lb-submit-btn" onclick="window.lbManualSubmit()" style="font-family:var(--mono-font,'Space Mono',monospace);font-size:11px;letter-spacing:2px;text-transform:uppercase;background:transparent;border:1px solid ${T.primary};border-radius:2px;color:${T.primary};padding:5px 12px;cursor:pointer;opacity:0.8;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8">↑ Submit</button>` : ""}
     `;
     wrap.appendChild(submitRow);
+
+    // Layout: title row [¥ RANKINGS ……… ↑ SUBMIT ↺], then one control row [ALL-TIME|WEEKLY] … [¥ BARS|CLICKS]
+    const hdrR = document.createElement("div"); hdrR.id = "lb-header-right";
+    const sbtn = submitRow.querySelector("#lb-submit-btn"); if (sbtn) hdrR.appendChild(sbtn);
+    hdrR.appendChild(header.querySelector("#lb-refresh-btn")); header.appendChild(hdrR);
+    const modeSeg = document.createElement("div"); modeSeg.className = "lb-seg"; modeSeg.id = "lb-mode-seg";
+    modeRow.querySelectorAll(".lb-mode-btn").forEach(x => modeSeg.appendChild(x));
+    const sortWrap = header.querySelector("#lb-sort-wrap"); sortWrap.classList.add("lb-seg");
+    const wr = modeRow.querySelector("#lb-week-reset"); submitRow.appendChild(wr);
+    modeRow.innerHTML = ""; modeRow.appendChild(modeSeg); modeRow.appendChild(sortWrap);
+    wrap.insertBefore(header, modeRow);
 
     // "Click more to rank" notice (filled by updateRankNote)
     const rankNote = document.createElement("div");
