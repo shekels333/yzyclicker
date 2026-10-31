@@ -7561,7 +7561,7 @@ window.updatePrestigeCard = updatePrestigeCard;
     [['ERA', row.era || '—'], ['LIFETIME ¥', '¥' + (typeof formatNum === 'function' ? formatNum(Number(row.total_bars) || 0) : row.total_bars)], ['CLICKS', typeof formatNum === 'function' ? formatNum(Number(row.total_clicks) || 0) : row.total_clicks]]
       .forEach(([k, v]) => { const d = document.createElement('div'); d.className = 'pcd-row'; const a = document.createElement('span'); a.textContent = k; const b = document.createElement('span'); b.textContent = v; d.appendChild(a); d.appendChild(b); rows.appendChild(d); });
     const xl = m.querySelector('.pcd-x-link'); const h = String(row.twitter_handle || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 15);
-    if (h) { xl.style.display = ''; xl.href = 'https://x.com/' + h; xl.textContent = ''; const xs = document.createElement('span'); xs.textContent = '@' + h; const fc = fxClass(fx); if (fc) { xs.className = fc; xs.dataset.text = xs.textContent; } xl.appendChild(xs); xl.appendChild(document.createTextNode(' on X ↗')); } else xl.style.display = 'none';
+    if (h) { xl.style.display = ''; xl.href = 'https://x.com/' + h; xl.textContent = ''; const xs = document.createElement('span'); xs.textContent = '@' + h + ' on X ↗'; const fc = fxClass(fx); if (fc) { xs.className = fc; xs.dataset.text = xs.textContent; } xl.appendChild(xs); } else xl.style.display = 'none';
   }
   function myRow() {
     let tw = ''; try { tw = window.getTwitterHandle ? window.getTwitterHandle() : ''; } catch (e) {}
