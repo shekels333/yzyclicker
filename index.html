@@ -115,18 +115,13 @@ html.yzy-lite .nfx-glow,html.yzy-lite .nfx-shimmer,html.yzy-lite .nfx-rainbow,ht
 #pcard-modal.show{display:flex}
 #cs-preview{position:sticky;top:-20px;z-index:2;margin:0 -2px 10px;padding:8px 2px 10px;background:linear-gradient(#0d0a00 85%,rgba(13,10,0,0))}
 #cs-preview .pv-lbl{font-size:10px;letter-spacing:1.5px;color:#bba;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#cs-preview .pcd{width:100%}
-#cs-preview .pcd-name{font-size:19px;margin:0 0 2px}
-#cs-preview .pcd-star{font-size:12px}
-#cs-preview .pcd-rows{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px}
-#cs-preview .pcd-row{flex-direction:column;align-items:center;padding:4px 0 0;font-size:11px}
-#cs-preview .pcd-row span:first-child{font-size:9px}
-#cs-preview .pcd-x-link{margin-top:4px;font-size:11px}
+#cs-preview .pv-fit{position:relative;overflow:hidden}
+#cs-preview .pv-fit>.pcd{position:absolute;top:0;left:50%;width:380px;transform-origin:top center}
 #cos-shop .cs-item{cursor:pointer}
 #cos-shop .cs-item.sel{outline:2px solid #ffd34d;outline-offset:-1px;background:rgba(255,211,77,.08)}
-:where(.pcd){position:relative;width:min(380px,100%);box-sizing:border-box;border-radius:14px;background:linear-gradient(160deg,#151208,#000 75%);font-family:var(--mono-font);color:#ddd;text-align:center}
+:where(.pcd){position:relative;font-size:16px;line-height:normal;letter-spacing:normal;width:min(380px,100%);box-sizing:border-box;border-radius:14px;background:linear-gradient(160deg,#151208,#000 75%);font-family:var(--mono-font);color:#ddd;text-align:center}
 #pcard-modal .pcd{padding:30px 30px 24px}
-#cs-preview .pcd{padding:18px 24px 14px}
+#cs-preview .pcd{padding:30px 30px 24px}
 .pcd-x{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:#000;color:#fff;cursor:pointer}
 .pcd-name{font-size:24px;font-weight:900;letter-spacing:1px;margin:6px 34px 4px;word-break:break-all}
 .pcd-star{color:#ffd34d;font-weight:800}
@@ -7531,6 +7526,7 @@ function updatePrestigeCard() {
 function showShopView(on) {
   const m = document.getElementById("prestige-modal"); m.classList.toggle("shopview", !!on);
   m.querySelector(".pp-card").scrollTop = 0;
+  if (on && window.yzyCos && yzyCos.fitPreview) yzyCos.fitPreview();
   const f = document.getElementById(on ? "shop-back-btn" : "shop-open-btn"); if (f) try { f.focus({ preventScroll: true }); } catch (e) {}
 }
 window.showShopView = showShopView;
@@ -7690,12 +7686,21 @@ window.updatePrestigeCard = updatePrestigeCard;
   function renderPreview(box) {
     const it = BY[pvId];
     const fx = it && it.kind === 'fx' ? it.id : state.name_fx, fr = it && it.kind !== 'fx' ? it.id : state.frame;
-    box.innerHTML = '<div class="pv-lbl"></div><div class="pcd"><div class="pcd-name"><span></span></div><div class="pcd-star"></div><div class="pcd-rows"></div><a class="pcd-x-link" target="_blank" rel="noopener"></a></div>';
+    box.innerHTML = '<div class="pv-lbl"></div><div class="pv-fit"><div class="pcd"><div class="pcd-name"><span></span></div><div class="pcd-star"></div><div class="pcd-rows"></div><a class="pcd-x-link" target="_blank" rel="noopener"></a></div></div>';
     const parts = [fx && BY[fx] ? BY[fx].name : 'No effect', fr && BY[fr] ? BY[fr].name : 'No frame'];
     box.querySelector('.pv-lbl').textContent = (it ? 'PREVIEW · ' : 'YOUR CARD · ') + parts.join(' + ') + (it && !owns(it.id) ? ' · ' + it.price + ' YzY' : '');
     fillCard(box.querySelector('.pcd'), myRow(), fx, fr);
+    fitPreview(box);
   }
-  window.yzyCos = { state, fxClass, frClass, openProfile, load, render, catalog: BY };
+  // Same 380px card as the board profile; scaled uniformly to fit the shop width.
+  function fitPreview(box) {
+    const fit = box && box.querySelector('.pv-fit'), c = fit && fit.querySelector('.pcd'); if (!c) return;
+    const w = fit.clientWidth; if (!w) return;
+    const k = Math.min(1, w / 380);
+    c.style.transform = 'translateX(-50%) scale(' + k + ')'; fit.style.height = Math.ceil(c.offsetHeight * k) + 'px';
+  }
+  window.addEventListener('resize', () => fitPreview(document.getElementById('cs-preview')));
+  window.yzyCos = { state, fxClass, frClass, openProfile, load, render, catalog: BY, fitPreview: () => fitPreview(document.getElementById('cs-preview')) };
   setTimeout(() => { if (me()) load(); }, 3000);
 })();
 function promptPrestige() {
