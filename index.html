@@ -7796,7 +7796,7 @@ function doPrestige() {
   try { renderShop(); } catch(e) {}
   try { updateUI(); } catch(e) {}
   if (window.saveGame) { try { window.saveGame(true); } catch(e) {} }
-  if (window.lbAutoSubmit) { try { window.lbAutoSubmit(); } catch(e) {} }
+  if (window.lbAutoSubmit) { try { window.lbAutoSubmit(false, true); } catch(e) {} }
   const sub = document.getElementById("milestone-sub");
   const oldSub = sub ? sub.textContent : "";
   if (sub) sub.textContent = `🏆 GOLD PLAQUE${g === 1 ? "" : "S"} — +${plaques * 10}% ALL INCOME 🏆`;
@@ -8345,11 +8345,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
     return 'resets in ' + (d ? d + 'd ' + h + 'h' : h ? h + 'h ' + m + 'm' : m + 'm');
   }
   window.weeklyResetText = weeklyResetText;
-  async function submitWeekly() {
+  async function submitWeekly(keepalive) {
     try {
       const res = await ownedRpc('yzy_weekly_submit_v2', getUsername(), { p_total_bars: cappedTotal(), p_total_clicks: Math.floor(totalClicks),
           p_era: ALBUM_THEMES[albumIdx] ? ALBUM_THEMES[albumIdx].name : null,
-          p_twitter: (window.getTwitterHandle ? window.getTwitterHandle() : '') || null, p_prestige: prestigeLevel });
+          p_twitter: (window.getTwitterHandle ? window.getTwitterHandle() : '') || null, p_prestige: prestigeLevel }, keepalive);
       if (res && res.ok && typeof res.need_clicks === 'number') weeklyNeed = res.need_clicks;
       if (window.updateRankNote) updateRankNote();
     } catch(e) { /* weekly is best-effort; never blocks all-time */ }
@@ -8381,8 +8381,24 @@ document.getElementById("shop").addEventListener("click", (e) => {
   window.getUsername = getUsername;
 
   // ── Supabase REST calls (exposed for cloud saves in initSaveSystem) ──
+  // Backoff: after a 5xx / 408 / 429 / network failure, background syncs pause
+  // (30s, 1m, 2m … up to 15m, with jitter) so a struggling database isn't hammered.
+  // Local saves are unaffected; user-initiated actions still go through.
+  let netFails = 0, netHoldUntil = 0;
+  function netHeld() { return Date.now() < netHoldUntil; }
+  window.yzyNetHeld = netHeld;
+  function netFailed() { netFails++; const base = Math.min(900000, 30000 * Math.pow(2, netFails - 1)); netHoldUntil = Date.now() + base * (0.8 + Math.random() * 0.4); }
   async function sbFetch(path, opts = {}) {
-    const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
+    let res;
+    try { res = await sbFetchRaw(path, opts); } catch (e) { netFailed(); throw e; }
+    if (res.status >= 500 || res.status === 408 || res.status === 429) netFailed();
+    else if (res.ok) { netFails = 0; netHoldUntil = 0; }
+    if (!res.ok) throw new Error("Supabase " + res.status);
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  }
+  function sbFetchRaw(path, opts) {
+    return fetch(SUPABASE_URL + "/rest/v1/" + path, {
       ...opts,
       headers: {
         "apikey":        SUPABASE_ANON,
@@ -8392,9 +8408,6 @@ document.getElementById("shop").addEventListener("click", (e) => {
         ...(opts.headers || {})
       }
     });
-    if (!res.ok) throw new Error("Supabase " + res.status);
-    const text = await res.text();
-    return text ? JSON.parse(text) : null;
   }
   window.sbFetch = sbFetch;
 
@@ -8426,9 +8439,11 @@ document.getElementById("shop").addEventListener("click", (e) => {
     setTimeout(() => window.yzyToast && window.yzyToast('The name ' + u + ' belongs to another player/device. Your progress is safe on this device, but it won\'t sync or rank — tap your name to pick a new one (or import your save code from the original device).', true), 300);
   }
   // Calls a secret-checked RPC for `name`. Returns the JSON result, or null on network error.
+  const BG_RPC = { yzy_save_put: 1, yzy_lb_submit: 1, yzy_weekly_submit_v2: 1, yzy_flag_report: 1 };
   async function ownedRpc(fn, name, args, keepalive) {
     if (!CONFIGURED || !hasProfile() || !name) return null;
     if (window._yzy_resetting) return null;   // a reset/delete is in progress: never re-post old data
+    if (BG_RPC[fn] && netHeld() && !keepalive) return null;   // backing off: skip background syncs
     const res = await sbFetch('rpc/' + fn, { method: 'POST', prefer: 'return=representation', keepalive: !!keepalive,
       body: JSON.stringify(Object.assign({ p_username: String(name).toUpperCase(), p_secret: getSecret(name) }, args || {})) });
     if (res && res.reason === 'taken') noteTaken(name);
@@ -8446,7 +8461,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
       if (!CONFIGURED || !hasProfile() || window._yzy_resetting) return;
       const name = getUsername(); if (!name) return;
       const sec = getSecret(name, false); if (!sec) return;
-      if (contestBusy || (!force && Date.now() - contestTs < 300000)) return;
+      if (contestBusy || (!force && Date.now() - contestTs < 900000) || netHeld()) return;
       contestBusy = true; contestTs = Date.now();
       const place = await sbFetch('rpc/yzy_contest_place', { method: 'POST', prefer: 'return=representation',
         body: JSON.stringify({ p_username: String(name).toUpperCase(), p_secret: sec }) });
@@ -8505,12 +8520,21 @@ document.getElementById("shop").addEventListener("click", (e) => {
   setTimeout(() => checkContest(true), 2500);
 
   // ── Submit score (upsert by username) ──
-  async function submitScore(silent) {
+  // Background submits: at most every 2 min while playing (10s floor for the
+  // hide/close flush), only when something changed, and paused during backoff.
+  // The server keeps the higher score itself ('kept'), and its rate allowance
+  // accrues from the last accepted submit, so less frequent submits never hurt.
+  const LB_SUBMIT_GAP = 120000;
+  let lbSentKey = '';
+  async function submitScore(silent, keepalive) {
     if (!CONFIGURED || !hasProfile() || window._yzy_resetting) return;
     const username   = getUsername();
     if (window._yzyNameTaken === username) { if (!silent) setSubmitStatus("Name owned by another player"); return; }
     const now        = Date.now();
-    if (now - lbSubmitTs < 15000) return;   // throttle: max once per 15s
+    if (silent && netHeld()) return;
+    if (now - lbSubmitTs < (keepalive ? 10000 : silent ? LB_SUBMIT_GAP : 15000)) return;
+    const sendKey = [username, cappedTotal(), Math.floor(totalClicks), prestigeLevel, albumIdx, (window.getTwitterHandle ? window.getTwitterHandle() : '') || ''].join('|');
+    if (silent && sendKey === lbSentKey) return;   // nothing changed since the last accepted submit
     lbSubmitTs = now;
 
     const currentEra = ALBUM_THEMES[albumIdx] ? ALBUM_THEMES[albumIdx].name : "Unknown";
@@ -8521,36 +8545,20 @@ document.getElementById("shop").addEventListener("click", (e) => {
     if (totalBars < 0 || totalClicks < 0) return;
     // Weekly board: server sets the baseline and enforces its own rules.
     // Totals above the season cap submit as the cap, so maxed players still rank.
-    if (totalClicks <= 5e7) submitWeekly();
+    if (totalClicks <= 5e7) submitWeekly(keepalive);
     if (totalClicks > 5e7) return;
     updateRankNote();
     if (cappedTotal() > 1e12 && totalClicks < 5000) return;
 
-    // ── Only submit if our score is higher than what's on the leaderboard ──
-    // Prevents a device with an old/lower save from overwriting a higher
-    // score that was set on another device.
-    try {
-      const existing = await sbFetch(
-        TABLE + '?select=total_bars,total_clicks&username=eq.' + encodeURIComponent(username),
-        { headers: { "Prefer": "return=representation" } }
-      );
-      if (existing && existing.length > 0) {
-        const remote = existing[0];
-        // Never pull remote totals into the local run — that poisoned saves when
-        // a higher (sometimes cheated) board score existed for the same name.
-        if (cappedTotal() < Number(remote.total_bars)) {
-          return; // keep the higher board score; leave local progress alone
-        }
-      }
-    } catch(e) {
-      // If fetch fails, proceed with submission anyway
-    }
+    // (The old per-submit GET of our own board row is gone: yzy_lb_submit
+    // already keeps the higher board score and returns 'kept' for lower ones.)
 
     try {
-      { const rep = AC.takeReport(); if (rep) ownedRpc('yzy_flag_report', username, { p_flagged: rep.flagged, p_details: rep.reasons }).catch(() => {}); }
+      { const rep = AC.takeReport(); if (rep) ownedRpc('yzy_flag_report', username, { p_flagged: rep.flagged, p_details: rep.reasons }, keepalive).catch(() => {}); }
       const r = await ownedRpc('yzy_lb_submit', username, {
         p_total_bars: cappedTotal(), p_total_clicks: Math.floor(totalClicks),
-        p_era: currentEra, p_twitter: twitterHandle || null, p_prestige: prestigeLevel });
+        p_era: currentEra, p_twitter: twitterHandle || null, p_prestige: prestigeLevel }, keepalive);
+      if (r && r.ok) lbSentKey = sendKey;
       if (r && r.reason === 'timeout') { AC.startTimeout(Date.parse(r.until) || 0, true); if (!silent) setSubmitStatus("Timed out: auto-clicker detected"); return; }
       if (!r || !r.ok) { if (!silent) setSubmitStatus(r && r.reason === 'taken' ? "Name owned by another player" : "Submit failed"); return; }
       setSubmitStatus("✓ Score submitted");
@@ -8787,7 +8795,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   // ── Auto-submit hooks ──
   // Called by save system on every autosave + manual save
-  window.lbAutoSubmit = function() { submitScore(true); };
+  window.lbAutoSubmit = function(keepalive, force) { if (force) lbSubmitTs = 0; submitScore(true, keepalive); };
   window.yzyRenderBoard = function() { try { renderLbList(); } catch (e) {} };
 
   // ── Rank pause notice: explains the clicks-based board rules (rules unchanged) ──
@@ -9028,13 +9036,17 @@ document.getElementById("shop").addEventListener("click", (e) => {
 
   // ── Cloud save helpers ──
   const CLOUD_SAVE_TABLE = "yzy_saves";
-  let cloudSaveTs = 0;
+  let cloudSaveTs = 0, cloudSentKey = '';
+  const CLOUD_SAVE_GAP = 120000;   // background cloud save at most every 2 min
+  function saveKeyOf(obj, username) { try { const o = Object.assign({}, obj); delete o.ts; return username + '|' + JSON.stringify(o); } catch(e) { return ''; } }
 
   async function pushCloudSave(obj, keepalive) {
     try {
       const username = (window.getUsername ? window.getUsername() : localStorage.getItem('yzy_username') || 'default');
       if (window._yzyNameTaken === username) return;
-      await window.yzyOwnedRpc('yzy_save_put', username, { p_save_data: JSON.stringify(obj) }, keepalive);
+      const key = saveKeyOf(obj, username);
+      const r = await window.yzyOwnedRpc('yzy_save_put', username, { p_save_data: JSON.stringify(obj) }, keepalive);
+      if (r && r.ok) cloudSentKey = key;
     } catch(e) { /* cloud save failed silently — local save still works */ }
   }
 
@@ -9064,11 +9076,16 @@ document.getElementById("shop").addEventListener("click", (e) => {
       writeSave(getSaveKey(), obj);
       if (!silent) flashSaveStatus('SAVED ✓', false);
       updateSaveStatus();
-      // Auto-submit to leaderboard on every save
-      if (window.lbAutoSubmit) window.lbAutoSubmit();
-      // Push to cloud (throttled — max once per 15s to avoid hammering Supabase)
+      // Network sync: skipped while the tab is hidden (one keepalive flush on
+      // hide/close instead), throttled, and only when something changed.
+      if (document.hidden && !keepalive) return;
+      // Auto-submit to leaderboard (submitScore throttles to once per 2 min)
+      if (window.lbAutoSubmit) window.lbAutoSubmit(keepalive);
       const now = Date.now();
-      if (now - cloudSaveTs > 15000 || (keepalive && now - cloudSaveTs > 2000)) {
+      const uname = window.getUsername ? window.getUsername() : '';
+      if ((now - cloudSaveTs > CLOUD_SAVE_GAP || (keepalive && now - cloudSaveTs > 10000))
+          && !(window.yzyNetHeld && window.yzyNetHeld() && !keepalive)
+          && saveKeyOf(obj, uname) !== cloudSentKey) {
         cloudSaveTs = now;
         pushCloudSave(obj, keepalive);
       }
@@ -9774,7 +9791,7 @@ document.getElementById("shop").addEventListener("click", (e) => {
   // Hidden-but-open tabs keep earning via the time-based tick (gaps capped at MAX_TICK_S).
   document.addEventListener('visibilitychange', () => {
     if (window._yzy_resetting) return;
-    if (document.hidden) { saveGame(true); return; }
+    if (document.hidden) { saveGame(true, true); return; }
     if (staleTab) resyncFromStorage();
   });
   window.addEventListener('pagehide', () => { if (!window._yzy_resetting) saveGame(true, true); });
