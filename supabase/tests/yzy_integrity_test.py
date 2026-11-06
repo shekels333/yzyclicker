@@ -30,7 +30,7 @@ check("normal submits over time (lowercase spelling)", r.get("ok") and row("SHEK
 # ── exploit C2/C1: prestige without bars
 check("C2 prestige 100 with no 33T stays 0", (LB("Shekels",S1,1e9,6000,100), pres("SHEKELS"))[1]==0, pres("SHEKELS"))
 check("C1 not logged before 33T", q("select count(*) from yzy_trillionbear_firsts")=="0", q("select * from yzy_trillionbear_firsts"))
-# ── legit: reach 33T -> logged; prestige 1 -> 2 at realistic pace
+# ── legit: reach 33T -> logged; one prestige, then the ★1 cap holds past 66T
 ago("yzy_leaderboard","submitted_at",120,"username='SHEKELS'")
 r=LB("Shekels",S1,34e12,8000,0); check("reach 33T submit ok", r.get("ok"), r)
 check("C1 logged at real 33T", q("select total_bars from yzy_trillionbear_firsts where username='SHEKELS'")=="34000000000000", q("select * from yzy_trillionbear_firsts"))
@@ -41,9 +41,9 @@ ago("yzy_leaderboard","submitted_at",300,"username='SHEKELS'")
 r=LB("Shekels",S1,70e12,10000,1)  # second run reaching 33T again
 r=LB("Shekels",S1,70e12,10000,2); check("C2 time gate: 2nd step inside 60s refused", pres("SHEKELS")==1)
 ago("yzy_leaderboard","prestige_at",61,"username='SHEKELS'")
-r=LB("Shekels",S1,70e12,10000,2); check("prestige 1->2 after 66T and >60s", pres("SHEKELS")==2, pres("SHEKELS"))
+r=LB("Shekels",S1,70e12,10000,2); check("prestige stays ★1 after 66T and >60s", pres("SHEKELS")==1, pres("SHEKELS"))
 ago("yzy_leaderboard","prestige_at",61,"username='SHEKELS'")
-r=LB("Shekels",S1,70e12,10000,5); check("C2 +1 max per event / floor caps", pres("SHEKELS")==2, pres("SHEKELS"))
+r=LB("Shekels",S1,70e12,10000,5); check("C2 +1 max per event / floor caps at 1", pres("SHEKELS")==1, pres("SHEKELS"))
 
 # ── shop buy + equip
 r=j(rpc("yzy_cosmetic_buy","shekels",S1,"fx_gold")); check("shop buy", r.get("ok") and "fx_gold" in r.get("owned",[]), r)
@@ -63,7 +63,7 @@ check("weekly single row", q("select count(*) from yzy_weekly")=="1")
 
 # ── M3: rename keeps cosmetics
 r=j(rpc("yzy_rename","Shekels","YZYKING",S1)); check("rename ok", r.get("ok"), r)
-c=j(rpc("yzy_cosmetics_get","YZYKING",S1)); check("M3 rename keeps cosmetics + equip", "fx_gold" in c.get("owned",[]) and c.get("name_fx")=="fx_gold" and c.get("prestige")==2, c)
+c=j(rpc("yzy_cosmetics_get","YZYKING",S1)); check("M3 rename keeps cosmetics + equip", "fx_gold" in c.get("owned",[]) and c.get("name_fx")=="fx_gold" and c.get("prestige")==1, c)
 check("rename moved trillionbear entry", q("select username from yzy_trillionbear_firsts")=="YZYKING")
 check("rename moved weekly", q("select username from yzy_weekly")=="YZYKING")
 # ── M2 charset

@@ -2337,10 +2337,10 @@ let runBars = 0, prestigeLevel = 0, prestigeBars = 0, plaques = 0, eraBest = 0;
 // Before the first prestige the run is the whole (non-legacy-offline) lifetime.
 function eraBars() { return prestigeLevel > 0 ? Math.max(0, runBars) : Math.max(0, totalBars - (offlineBars || 0)); }
 const PRESTIGE_ERA = 14; // Trillionbear
-const PRESTIGE_MAX = 100;
+const PRESTIGE_MAX = 1;
 function prestigeMaxed() { return prestigeLevel >= PRESTIGE_MAX; }
 function prestigeNeed() { return ALBUM_THEMES[PRESTIGE_ERA].threshold; }
-// Gold Plaques: exactly one per prestige (plaques === prestigeLevel, max 100). Banking a bigger run gives no extra.
+// Gold Plaques: exactly one per prestige (plaques === prestigeLevel). Cap is ★1. Banking a bigger run gives no extra.
 function plaqueMult() { return 1 + 0.1 * plaques; }
 function prestigeGain() { if (prestigeMaxed()) return 0; const rb = eraBars(); return rb >= prestigeNeed() ? 1 : 0; }
 function prestigeReady() { return prestigeGain() >= 1; }
@@ -7581,11 +7581,11 @@ function updatePrestigeCard() {
   const html =
     `<div class="pp-stats"><div><b>★${prestigeLevel}${prestigeMaxed() ? " MAX" : ""}</b><span>LEVEL</span></div><div><b>🏆${plaques}</b><span>PLAQUES</span></div><div><b>+${plaques * 10}%</b><span>ALL INCOME</span></div></div>` +
     (prestigeMaxed() ? "" :
-    `<div class="pc-line">Each prestige: <b>+1</b> plaque (+10% all income)</div>` +
+    `<div class="pc-line">Prestige once: <b>+1</b> plaque (+10% all income) and <b>1</b> YzY Token. ★1 is the cap.</div>` +
     `<div class="pc-line">Progress to unlock: ¥${formatNum(Math.min(eb, need))} / ¥${formatNum(need)} · ${pct < 1 ? pct.toFixed(2) : pct.toFixed(0)}%</div>` +
     `<div class="pc-bar"><i style="width:${pct.toFixed(2)}%"></i></div>`) +
     action +
-    `<div class="pp-rules"><div><b>RESETS:</b> bars, generators, performances, fashion, eras.</div><div><b>KEEPS:</b> name, lifetime ¥ on the board, clicks, plaques, ★ level, milestones, settings.</div><div>1 plaque per prestige — a bigger run doesn't earn extra. Each plaque = +10% to clicks and generators, forever.</div></div>`;
+    `<div class="pp-rules"><div><b>RESETS:</b> bars, generators, performances, fashion, eras.</div><div><b>KEEPS:</b> name, lifetime ¥ on the board, clicks, plaques, ★ level, milestones, settings.</div><div>★1 is the cap. One plaque and one YzY Token — a bigger run doesn't earn extra. The plaque is +10% to clicks and generators, forever.</div></div>`;
   if (pc._html !== html) { pc._html = html; pc.innerHTML = html; pc.dataset.state = state; }
 }
 function showShopView(on) {
@@ -7641,6 +7641,11 @@ window.updatePrestigeCard = updatePrestigeCard;
     { id: 'fr_trillion', cls: 'pfr-trillion', name: 'Trillionbear', price: 15, anim: 1 } ];
   const BY = {}; FX.forEach(x => BY[x.id] = Object.assign({ kind: 'fx' }, x)); FR.forEach(x => BY[x.id] = Object.assign({ kind: 'frame' }, x));
   const PER_PRESTIGE = 1;
+  function needTokens() {
+    return (typeof prestigeMaxed === 'function' && prestigeMaxed())
+      ? 'Not enough YzY Tokens — ★1 earns 1, and that is the cap.'
+      : 'Not enough YzY Tokens — reach ★1 to earn 1.';
+  }
   const state = { loaded: false, balance: 0, earned: 0, owned: [], name_fx: null, frame: null };
   let tab = 'fx', busy = false, msg = '', pvId = null;
   const fxClass = id => (BY[id] && BY[id].kind === 'fx') ? BY[id].cls : '';
@@ -7674,12 +7679,12 @@ window.updatePrestigeCard = updatePrestigeCard;
     if (equipped) r = await rpc('yzy_cosmetic_equip', { p_kind: it.kind, p_item: null });
     else if (owns(id)) r = await rpc('yzy_cosmetic_equip', { p_kind: it.kind, p_item: id });
     else {
-      if (state.balance < it.price) { busy = false; msg = 'Not enough YzY Tokens — prestige to earn more.'; render(); return; }
+      if (state.balance < it.price) { busy = false; msg = needTokens(); render(); return; }
       r = await rpc('yzy_cosmetic_buy', { p_item: id });
       if (r && r.ok) { applyState(r); r = await rpc('yzy_cosmetic_equip', { p_kind: it.kind, p_item: id }); }
     }
     busy = false;
-    if (!applyState(r)) msg = r && r.reason === 'funds' ? 'Not enough YzY Tokens — prestige to earn more.' : r && r.reason === 'no-board' ? 'Submit a score to the ¥ Board first.' : 'Something went wrong — try again.';
+    if (!applyState(r)) msg = r && r.reason === 'funds' ? needTokens() : r && r.reason === 'no-board' ? 'Submit a score to the ¥ Board first.' : 'Something went wrong — try again.';
     render();
     if (window.yzyRenderBoard) window.yzyRenderBoard();
   }
@@ -7689,7 +7694,7 @@ window.updatePrestigeCard = updatePrestigeCard;
     const el = document.getElementById('cos-shop'); if (!el) return;
     const items = tab === 'fx' ? FX : FR; const nm = me() || 'YOUR NAME';
     let h = `<div class="cs-head"><span class="cs-title">SHOP</span><span class="cs-bal" id="cs-bal"><b class="yzy-tk">YzY</b> ${state.balance} YzY Token${state.balance===1?'':'s'}</span></div>` +
-      `<div class="cs-note">Earn ${PER_PRESTIGE} YzY Token per prestige level (★). Plaques are never spent. Everyone sees your look on the ¥ Board.</div>` +
+      `<div class="cs-note">★${PRESTIGE_MAX} earns ${PER_PRESTIGE} YzY Token. Plaques are never spent. Everyone sees your look on the ¥ Board.</div>` +
       `<div class="cs-tabs"><button type="button" data-tab="fx" class="${tab === 'fx' ? 'on' : ''}">NAME EFFECTS</button><button type="button" data-tab="frame" class="${tab === 'frame' ? 'on' : ''}">CARD FRAMES</button></div>`;
     items.forEach(it => {
       const eq = (tab === 'fx' ? state.name_fx : state.frame) === it.id, own = owns(it.id);
@@ -7712,7 +7717,7 @@ window.updatePrestigeCard = updatePrestigeCard;
       const b = e.target.closest('button.cs-btn');
       if (!b) { const row = e.target.closest('.cs-item'); if (row && BY[row.dataset.id]) { pvId = row.dataset.id; render(); } return; }
       if (!b.disabled) act(b.dataset.id);
-      else if (b && b.disabled && BY[b.dataset.id] && !owns(b.dataset.id) && state.loaded) { msg = 'Not enough YzY Tokens — prestige to earn more.'; render(); }
+      else if (b && b.disabled && BY[b.dataset.id] && !owns(b.dataset.id) && state.loaded) { msg = needTokens(); render(); }
     });
     const sb = document.getElementById('star-btn'); if (sb) sb.addEventListener('click', () => { pvId = null; render(); load(); });
     render();
@@ -7734,7 +7739,7 @@ window.updatePrestigeCard = updatePrestigeCard;
   function fillCard(card, row, fx, fr) {
     const m = card; card.className = 'pcd ' + frClass(fr);
     const n = m.querySelector('.pcd-name span'); n.textContent = String(row.username || 'ANON').toUpperCase(); n.className = fxClass(fx); n.dataset.text = n.textContent;
-    const pv = Math.min(100, Math.floor(Number(row.prestige) || 0));
+    const pv = Math.min(PRESTIGE_MAX, Math.max(0, Math.floor(Number(row.prestige) || 0)));
     m.querySelector('.pcd-star').textContent = '★' + pv + (pv === 1 ? ' prestige' : ' prestiges');
     const rows = m.querySelector('.pcd-rows'); rows.innerHTML = '';
     [['ERA', row.era || '—'], ['LIFETIME ¥', '¥' + (typeof formatNum === 'function' ? formatNum(Number(row.total_bars) || 0) : row.total_bars)], ['CLICKS', typeof formatNum === 'function' ? formatNum(Number(row.total_clicks) || 0) : row.total_clicks]]
@@ -8753,8 +8758,8 @@ document.getElementById("shop").addEventListener("click", (e) => {
       nameEl.appendChild(nmSpan);
       div.style.cursor = "pointer";
       div.addEventListener("click", () => window.yzyCos && yzyCos.openProfile(row, isMe));
-      const pv = Math.floor(Number(row.prestige) || 0);
-      if (pv > 0) { const b = document.createElement("span"); b.className = "lb-prestige"; b.textContent = " ★" + Math.min(pv, 500); b.title = "Prestige " + pv; nameEl.appendChild(b); }
+      const pv = Math.min(PRESTIGE_MAX, Math.max(0, Math.floor(Number(row.prestige) || 0)));
+      if (pv > 0) { const b = document.createElement("span"); b.className = "lb-prestige"; b.textContent = " ★" + pv; b.title = "Prestige " + pv; nameEl.appendChild(b); }
       if (isMe) nameEl.appendChild(document.createTextNode(" ◀"));
       nameWrap.appendChild(nameEl);
       if (row.twitter_handle) {
